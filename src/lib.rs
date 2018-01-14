@@ -14,6 +14,13 @@ extern crate rustc_serialize;
 #[cfg(feature="random")]
 extern crate quickcheck;
 
+#[cfg(feature="with-serde")]
+extern crate serde as sd;
+
+#[cfg(feature="with-serde")]
+#[macro_use]
+extern crate quick_error;
+
 pub mod types;
 pub mod value;
 pub mod decoder;
@@ -23,6 +30,9 @@ pub mod slice;
 
 #[cfg(feature="random")]
 pub mod random;
+
+#[cfg(feature="with-serde")]
+pub mod serde;
 
 pub use decoder::{Config, Decoder, DecodeError, DecodeResult, GenericDecoder};
 pub use decoder::{opt, maybe, or_break};
