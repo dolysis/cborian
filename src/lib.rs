@@ -21,6 +21,9 @@ extern crate serde as sd;
 #[macro_use]
 extern crate quick_error;
 
+#[macro_use]
+pub mod macros;
+
 pub mod types;
 pub mod value;
 pub mod decoder;
