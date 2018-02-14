@@ -163,6 +163,8 @@ pub enum DecodeError {
     IntOverflow(u64),
     /// The decoded `Value` can not serve as a `Key` in an object
     InvalidKey(Value),
+    /// An object key was missing (cf. object! macro)
+    MissingKey(&'static str),
     /// The type of `Value` is not what is expected for a `Tag`
     InvalidTag(Value),
     /// The string is not encoded in UTF-8
@@ -240,6 +242,7 @@ impl fmt::Display for DecodeError {
             DecodeError::DuplicateKey(ref k) => write!(f, "DecodeError: duplicate key: {:?}", *k),
             DecodeError::IntOverflow(n)      => write!(f, "DecodeError: integer overflow: {}", n),
             DecodeError::InvalidKey(ref k)   => write!(f, "DecodeError: unsuitable map key: {:?}", *k),
+            DecodeError::MissingKey(k)       => write!(f, "Missing object key: {}", k),
             DecodeError::InvalidTag(ref v)   => write!(f, "DecodeError: value does not match tag: {:?}", *v),
             DecodeError::InvalidUtf8(ref e)  => write!(f, "DecodeError: Invalid UTF-8 encoding: {}", *e),
             DecodeError::IoError(ref e)      => write!(f, "DecodeError: I/O error: {}", *e),
@@ -259,6 +262,7 @@ impl Error for DecodeError {
             DecodeError::DuplicateKey(_)    => "duplicate key in objects",
             DecodeError::IntOverflow(_)     => "integer overflow",
             DecodeError::InvalidKey(_)      => "invalid object key",
+            DecodeError::MissingKey(_)      => "missing object key",
             DecodeError::InvalidTag(_)      => "invalid tag",
             DecodeError::InvalidUtf8(_)     => "invalid utf-8",
             DecodeError::IoError(_)         => "i/o error",
@@ -503,14 +507,14 @@ impl<R: ReadBytesExt> Kernel<R> {
     pub fn f16(&mut self, ti: &TypeInfo) -> DecodeResult<f32> {
         match ti.0 {
             Type::Float16 => {
-                // Copied from RFC 7049 Appendix D:
+                // Copied from RFC 7049 Appendix D and replaced ldexpf usage:
                 let half  = self.reader.read_u16::<BigEndian>()?;
                 let exp   = half >> 10 & 0x1F;
                 let mant  = half & 0x3FF;
                 let value = match exp {
-                    0  => ffi::c_ldexpf(mant as f32, -24),
+                    0  => mant as f32 * (2f32).powi(-24),
                     31 => if mant == 0 { f32::INFINITY } else { f32::NAN },
-                    _  => ffi::c_ldexpf(mant as f32 + 1024.0, exp as isize - 25)
+                    _  => (mant as f32 + 1024.0) * (2f32).powi(exp as i32 - 25)
                 };
                 Ok(if half & 0x8000 == 0 { value } else { - value })
             }
@@ -606,20 +610,6 @@ impl<R: ReadBytesExt + ReadSlice> Kernel<R> {
             return Err(DecodeError::TooLong { max: max_len, actual: len })
         }
         self.reader.read_slice(len as usize).map_err(From::from)
-    }
-}
-
-// Workaround to not require the currently unstable `f32::ldexp`:
-mod ffi {
-    use libc::c_int;
-
-    extern {
-        pub fn ldexpf(x: f32, exp: c_int) -> f32;
-    }
-
-    #[inline]
-    pub fn c_ldexpf(x: f32, exp: isize) -> f32 {
-        unsafe { ldexpf(x, exp as c_int) }
     }
 }
 

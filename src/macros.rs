@@ -4,7 +4,7 @@
 // can obtain one at http://mozilla.org/MPL/2.0/.
 
 #[macro_export]
-macro_rules! object_u8 {
+macro_rules! object {
     (
       let decoder = $dec: ident;
       $T: ident {
@@ -14,23 +14,23 @@ macro_rules! object_u8 {
         let size = $dec.object()?;
         $(let mut $name = None;)+
         for _ in 0 .. size {
-            match $dec.u8()? {
+            match $dec.u16()? {
                 $($key => { $name = Some($action?) })+
                 _      => { $dec.skip()? }
             }
         }
         Ok($T {
-            $($name: to_field!("index not found", $name),)+
+            $($name: to_field!(stringify!($name [$key]), $name),)+
         })
     }};
 }
 
 #[macro_export]
 macro_rules! to_field {
-    ($msg: expr, $e: expr) => {
+    ($err: expr, $e: expr) => {
         match $e {
             Some(e) => e,
-            None    => return Err(::std::convert::From::from($crate::DecodeError::Other($msg.into())))
+            None    => return Err(::std::convert::From::from($crate::DecodeError::MissingKey($err)))
         }
     }
 }
