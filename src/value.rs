@@ -304,8 +304,8 @@ impl<'r> Cursor<'r> {
 /// ensure that the `Tag` and type of value match according to
 /// RFC 7049 section 2.4
 pub fn check(value: &Value) -> bool {
-    fn fun(t: Tag, b: &Value) -> bool {
-        match (t, b) {
+    fn fun(tag: Tag, value: &Value) -> bool {
+        match (tag, value) {
             (Tag::DateTime, &Value::Text(_)) => true,
             (Tag::Timestamp, &Value::U8(_)) => true,
             (Tag::Timestamp, &Value::U16(_)) => true,
@@ -329,19 +329,21 @@ pub fn check(value: &Value) -> bool {
             (Tag::Regex, &Value::Text(_)) => true,
             (Tag::Mime, &Value::Text(_)) => true,
             (Tag::CborSelf, _) => true,
-            (Tag::Decimal, &Value::Array(ref a)) | (Tag::Bigfloat, &Value::Array(ref a)) => {
-                if a.len() != 2 {
+            (Tag::Decimal, &Value::Array(ref array))
+            | (Tag::Bigfloat, &Value::Array(ref array)) => {
+                if array.len() != 2 {
                     return false;
                 }
-                let is_integral = |v: &Value| match *v {
+                let is_integral = |integral: &Value| match *integral {
                     Value::U8(_) | Value::U16(_) | Value::U32(_) | Value::U64(_) => true,
                     Value::I8(_) | Value::I16(_) | Value::I32(_) | Value::I64(_) => true,
                     _ => false,
                 };
-                let is_bignum = |v: &Value| fun(Tag::Bignum, v) || fun(Tag::NegativeBignum, v);
-                let ref e = a[0];
-                let ref m = a[1];
-                is_integral(e) && (is_integral(m) || is_bignum(m))
+                let is_bignum =
+                    |bignum: &Value| fun(Tag::Bignum, bignum) || fun(Tag::NegativeBignum, bignum);
+                let exponent = &array[0];
+                let mantissa = &array[1];
+                is_integral(exponent) && (is_integral(mantissa) || is_bignum(mantissa))
             }
             (Tag::Unassigned(_), _) => true,
             _ => false,

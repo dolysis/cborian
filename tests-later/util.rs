@@ -3,8 +3,8 @@
 // the MPL was not distributed with this file, You
 // can obtain one at http://mozilla.org/MPL/2.0/.
 
-use cbor::{Config, Decoder, Encoder, EncodeResult};
-use cbor::value::Value;
+use cborian::{Config, Decoder, Encoder, EncodeResult};
+use cborian::value::Value;
 use std::io::Cursor;
 
 pub fn identity<F, G>(enc: F, dec: G) -> bool

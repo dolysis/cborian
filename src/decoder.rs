@@ -23,7 +23,7 @@
 //! # Example 1: Direct decoding
 //!
 //! ```
-//! use cbor::{Config, Decoder};
+//! use cborian::{Config, Decoder};
 //! use std::io::Cursor;
 //!
 //! let mut d = Decoder::new(Config::default(), Cursor::new(vec![0u8]));
@@ -34,11 +34,10 @@
 //!
 //! ```
 //!
-//! use cbor::{Config, Decoder};
+//! use cborian::{Config, Decoder};
 //! use rustc_serialize::hex::FromHex;
 //! use std::io::Cursor;
 //!
-//! fn main() {
 //!     let input   = Cursor::new("828301020383010203".from_hex().unwrap());
 //!     let mut dec = Decoder::new(Config::default(), input);
 //!     let mut res = Vec::new();
@@ -50,31 +49,28 @@
 //!         res.push(vec)
 //!     }
 //!     assert_eq!(vec![vec![1, 2, 3], vec![1, 2, 3]], res)
-//! }
 //! ```
 //!
 //! # Example 3: Generic decoding
 //!
 //! ```
-//! use cbor::{Config, GenericDecoder};
-//! use cbor::value::{self, Key};
+//! use cborian::{Config, GenericDecoder};
+//! use cborian::value::{self, Key};
 //! use rustc_serialize::hex::FromHex;
 //! use std::io::Cursor;
 //!
-//! fn main() {
 //!     let input = Cursor::new("a2616101028103".from_hex().unwrap());
 //!     let mut d = GenericDecoder::new(Config::default(), input);
 //!     let value = d.value().unwrap();
 //!     let     c = value::Cursor::new(&value);
 //!     assert_eq!(Some(1), c.field("a").u8());
 //!     assert_eq!(Some(3), c.get(Key::u64(2)).at(0).u8())
-//! }
 //! ```
 //!
 //! # Example 4: Direct decoding (optional value)
 //!
 //! ```
-//! use cbor::{opt, Config, Decoder};
+//! use cborian::{opt, Config, Decoder};
 //! use std::io::Cursor;
 //!
 //! let mut d = Decoder::new(Config::default(), Cursor::new(vec![0xF6]));
@@ -228,62 +224,55 @@ pub fn or_break<A>(r: DecodeResult<A>) -> DecodeResult<Option<A>> {
     }
 }
 
-fn is_break(e: &DecodeError) -> bool {
-    match *e {
-        DecodeError::UnexpectedType {
-            datatype: Type::Break,
-            ..
-        } => true,
-        _ => false,
-    }
+fn is_break(error: &DecodeError) -> bool {
+    matches!(*error, DecodeError::UnexpectedType {
+        datatype: Type::Break,
+        ..
+    })
 }
 
-fn is_null(e: &DecodeError) -> bool {
-    match *e {
-        DecodeError::UnexpectedType {
-            datatype: Type::Null,
-            ..
-        } => true,
-        _ => false,
-    }
+fn is_null(error: &DecodeError) -> bool {
+    matches!(*error, DecodeError::UnexpectedType {
+        datatype: Type::Null,
+        ..
+    })
 }
 
-fn is_undefined(e: &DecodeError) -> bool {
-    match *e {
-        DecodeError::UnexpectedType {
-            datatype: Type::Undefined,
-            ..
-        } => true,
-        _ => false,
-    }
+fn is_undefined(error: &DecodeError) -> bool {
+    matches!(*error, DecodeError::UnexpectedType {
+        datatype: Type::Undefined,
+        ..
+    })
 }
 
 impl fmt::Display for DecodeError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    fn fmt(&self, format: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match *self {
-            DecodeError::DuplicateKey(ref k) => write!(f, "DecodeError: duplicate key: {:?}", *k),
-            DecodeError::IntOverflow(n) => write!(f, "DecodeError: integer overflow: {}", n),
+            DecodeError::DuplicateKey(ref k) => {
+                write!(format, "DecodeError: duplicate key: {:?}", *k)
+            }
+            DecodeError::IntOverflow(n) => write!(format, "DecodeError: integer overflow: {}", n),
             DecodeError::InvalidKey(ref k) => {
-                write!(f, "DecodeError: unsuitable map key: {:?}", *k)
+                write!(format, "DecodeError: unsuitable map key: {:?}", *k)
             }
             DecodeError::InvalidTag(ref v) => {
-                write!(f, "DecodeError: value does not match tag: {:?}", *v)
+                write!(format, "DecodeError: value does not match tag: {:?}", *v)
             }
             DecodeError::InvalidUtf8(ref e) => {
-                write!(f, "DecodeError: Invalid UTF-8 encoding: {}", *e)
+                write!(format, "DecodeError: Invalid UTF-8 encoding: {}", *e)
             }
-            DecodeError::IoError(ref e) => write!(f, "DecodeError: I/O error: {}", *e),
-            DecodeError::TooNested => write!(f, "DecodeError: value is too nested"),
-            DecodeError::UnexpectedEOF => write!(f, "DecodeError: unexpected end-of-file"),
-            DecodeError::UnexpectedBreak => write!(f, "DecodeError: unexpected break"),
-            DecodeError::Other(ref e) => write!(f, "DecodeError: other: {:?}", e),
+            DecodeError::IoError(ref e) => write!(format, "DecodeError: I/O error: {}", *e),
+            DecodeError::TooNested => write!(format, "DecodeError: value is too nested"),
+            DecodeError::UnexpectedEOF => write!(format, "DecodeError: unexpected end-of-file"),
+            DecodeError::UnexpectedBreak => write!(format, "DecodeError: unexpected break"),
+            DecodeError::Other(ref e) => write!(format, "DecodeError: other: {:?}", e),
             DecodeError::TooLong { max: m, actual: a } => {
-                write!(f, "DecodeError: value is too long {} (max={})", a, m)
+                write!(format, "DecodeError: value is too long {} (max={})", a, m)
             }
             DecodeError::UnexpectedType {
                 datatype: t,
                 info: i,
-            } => write!(f, "DecodeError: unexpected type {:?} (info={})", t, i),
+            } => write!(format, "DecodeError: unexpected type {:?} (info={})", t, i),
         }
     }
 }
@@ -1132,9 +1121,10 @@ impl<R: ReadBytesExt> GenericDecoder<R> {
         self.decoder
     }
 
-    pub fn borrow_mut(&mut self) -> &mut Decoder<R> {
-        &mut self.decoder
-    }
+    // dead code
+    // pub(crate) fn borrow_mut(&mut self) -> &mut Decoder<R> {
+    //    &mut self.decoder
+    // }
 
     /// Decode into a `Value`, i.e. an intermediate representation which
     /// can be further deconstructed using a `Cursor`.

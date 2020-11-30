@@ -3,9 +3,9 @@
 // the MPL was not distributed with this file, You
 // can obtain one at http://mozilla.org/MPL/2.0/.
 
-use cbor::{GenericEncoder, GenericDecoder};
-use cbor::random::gen_value;
-use cbor::value::{Key, Value};
+use cborian::{GenericEncoder, GenericDecoder};
+use cborian::random::gen_value;
+use cborian::value::{Key, Value};
 use quickcheck::{Arbitrary, Gen, QuickCheck, StdGen};
 use rand;
 use std::collections::BTreeMap;

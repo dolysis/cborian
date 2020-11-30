@@ -1,0 +1,30 @@
+{
+  "cSpell.allowCompoundWords": true,
+  "cSpell.dictionaries": [
+    "rust",
+    "softwareTerms",
+    "fullstack"
+  ],
+  "cSpell.words": [
+    "Bignum",
+    "CBOR",
+    "Toralf",
+    "Wittner",
+    "cborian",
+    "dfsdfsdf",
+    "ldexp",
+    "ldexpf",
+    "libc",
+    "nsdf",
+    "nsdfsfsdfs",
+    "psox",
+    "rustc",
+    "strea"
+  ],
+  "rust-analyzer.lens.enable": true,
+  "rust-analyzer.updates.channel": "stable",
+  "rust-analyzer.checkOnSave.enable": true,
+  "rust-analyzer.checkOnSave.command": "clippy",
+  "rust-analyzer.checkOnSave.overrideCommand": ["cargo","clippy","--message-format=json"],
+  // vim: filetype=jsonc
+}

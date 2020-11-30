@@ -15,7 +15,7 @@
 //! extern crate cbor;
 //! extern crate rustc_serialize;
 //!
-//! use cbor::Encoder;
+//! use cborian::Encoder;
 //! use rustc_serialize::hex::FromHex;
 //! use std::io::Cursor;
 //!
@@ -32,7 +32,7 @@
 //! extern crate cbor;
 //! extern crate rustc_serialize;
 //!
-//! use cbor::Encoder;
+//! use cborian::Encoder;
 //! use rustc_serialize::hex::FromHex;
 //! use std::io::Cursor;
 //!
@@ -50,7 +50,7 @@
 //! extern crate cbor;
 //! extern crate rustc_serialize;
 //!
-//! use cbor::Encoder;
+//! use cborian::Encoder;
 //! use rustc_serialize::hex::FromHex;
 //! use std::io::Cursor;
 //!
@@ -153,7 +153,7 @@ impl<W: WriteBytesExt> Encoder<W> {
     }
 
     pub fn u8(&mut self, x: u8) -> EncodeResult {
-        let ref mut w = self.writer;
+        let w = &mut self.writer;
         match x {
             0..=23 => w.write_u8(x).map_err(From::from),
             _ => w.write_u8(24).and(w.write_u8(x)).map_err(From::from),
@@ -161,7 +161,7 @@ impl<W: WriteBytesExt> Encoder<W> {
     }
 
     pub fn u16(&mut self, x: u16) -> EncodeResult {
-        let ref mut w = self.writer;
+        let w = &mut self.writer;
         match x {
             0..=23 => w.write_u8(x as u8).map_err(From::from),
             24..=0xFF => w.write_u8(24).and(w.write_u8(x as u8)).map_err(From::from),
@@ -173,7 +173,7 @@ impl<W: WriteBytesExt> Encoder<W> {
     }
 
     pub fn u32(&mut self, x: u32) -> EncodeResult {
-        let ref mut w = self.writer;
+        let w = &mut self.writer;
         match x {
             0..=23 => w.write_u8(x as u8).map_err(From::from),
             24..=0xFF => w.write_u8(24).and(w.write_u8(x as u8)).map_err(From::from),
@@ -189,7 +189,7 @@ impl<W: WriteBytesExt> Encoder<W> {
     }
 
     pub fn u64(&mut self, x: u64) -> EncodeResult {
-        let ref mut w = self.writer;
+        let w = &mut self.writer;
         match x {
             0..=23 => w.write_u8(x as u8).map_err(From::from),
             24..=0xFF => w.write_u8(24).and(w.write_u8(x as u8)).map_err(From::from),
@@ -212,7 +212,7 @@ impl<W: WriteBytesExt> Encoder<W> {
         if x >= 0 {
             self.u8(x as u8)
         } else {
-            let ref mut w = self.writer;
+            let w = &mut self.writer;
             match (-1 - x) as u8 {
                 n @ 0..=23 => w.write_u8(0b001_00000 | n).map_err(From::from),
                 n => w
@@ -227,7 +227,7 @@ impl<W: WriteBytesExt> Encoder<W> {
         if x >= 0 {
             self.u16(x as u16)
         } else {
-            let ref mut w = self.writer;
+            let w = &mut self.writer;
             match (-1 - x) as u16 {
                 n @ 0..=23 => w.write_u8(0b001_00000 | n as u8).map_err(From::from),
                 n @ 24..=0xFF => w
@@ -246,7 +246,7 @@ impl<W: WriteBytesExt> Encoder<W> {
         if x >= 0 {
             self.u32(x as u32)
         } else {
-            let ref mut w = self.writer;
+            let w = &mut self.writer;
             match (-1 - x) as u32 {
                 n @ 0..=23 => w.write_u8(0b001_00000 | n as u8).map_err(From::from),
                 n @ 24..=0xFF => w
@@ -269,7 +269,7 @@ impl<W: WriteBytesExt> Encoder<W> {
         if x >= 0 {
             self.u64(x as u64)
         } else {
-            let ref mut w = self.writer;
+            let w = &mut self.writer;
             match (-1 - x) as u64 {
                 n @ 0..=23 => w.write_u8(0b001_00000 | n as u8).map_err(From::from),
                 n @ 24..=0xFF => w
@@ -296,7 +296,7 @@ impl<W: WriteBytesExt> Encoder<W> {
         match x {
             Int::Pos(v) => self.u64(v),
             Int::Neg(v) => {
-                let ref mut w = self.writer;
+                let w = &mut self.writer;
                 match v {
                     n @ 0..=23 => w.write_u8(0b001_00000 | n as u8).map_err(From::from),
                     n @ 24..=0xFF => w
@@ -341,7 +341,7 @@ impl<W: WriteBytesExt> Encoder<W> {
     }
 
     pub fn simple(&mut self, x: Simple) -> EncodeResult {
-        let ref mut w = self.writer;
+        let w = &mut self.writer;
         match x {
             Simple::Unassigned(n) => match n {
                 0..=19 | 28..=30 => w.write_u8(0b111_00000 | n).map_err(From::from),
@@ -430,7 +430,7 @@ impl<W: WriteBytesExt> Encoder<W> {
     }
 
     fn type_len(&mut self, t: Type, x: u64) -> EncodeResult {
-        let ref mut w = self.writer;
+        let w = &mut self.writer;
         match x {
             0..=23 => w.write_u8(t.major() << 5 | x as u8).map_err(From::from),
             24..=0xFF => w
@@ -475,9 +475,10 @@ impl<W: WriteBytesExt> GenericEncoder<W> {
         self.encoder
     }
 
-    pub fn borrow_mut(&mut self) -> &mut Encoder<W> {
-        &mut self.encoder
-    }
+    // dead code
+    // pub fn borrow_mut(&mut self) -> &mut Encoder<W> {
+    //     &mut self.encoder
+    // }
 
     pub fn value(&mut self, x: &Value) -> EncodeResult {
         match *x {

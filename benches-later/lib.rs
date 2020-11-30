@@ -4,18 +4,12 @@
 // can obtain one at http://mozilla.org/MPL/2.0/.
 
 #![feature(test)]
-
-extern crate cbor;
-extern crate quickcheck;
-extern crate rand;
-extern crate test;
-
-use cbor::random::gen_value;
-use cbor::{Config, GenericDecoder, GenericEncoder};
+use crate::random::gen_value;
+use crate::test::Bencher;
+use cborian::{Config, GenericDecoder, GenericEncoder};
 use quickcheck::StdGen;
 use rand::chacha::ChaChaRng;
 use std::io::Cursor;
-use test::Bencher;
 
 fn mk_value(min: usize) -> Vec<u8> {
     let mut g = StdGen::new(ChaChaRng::new_unseeded(), 255);
