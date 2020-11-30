@@ -8,9 +8,9 @@
 //! A `Cursor` can be used to deconstruct and traverse
 //! a `Value`.
 
+use crate::types::Tag;
 use std::collections::{BTreeMap, LinkedList};
 use std::i64;
-use types::Tag;
 
 /// The generic CBOR representation.
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
@@ -35,7 +35,7 @@ pub enum Value {
     U16(u16),
     U32(u32),
     U64(u64),
-    Undefined
+    Undefined,
 }
 
 /// Type to represent all possible CBOR integer values.
@@ -47,7 +47,7 @@ pub enum Value {
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Int {
     Neg(u64),
-    Pos(u64)
+    Pos(u64),
 }
 
 impl Int {
@@ -69,7 +69,7 @@ impl Int {
         match *self {
             Int::Neg(n) if n <= i64::MAX as u64 => Some(-1 - n as i64),
             Int::Pos(n) if n <= i64::MAX as u64 => Some(n as i64),
-            _ => None
+            _ => None,
         }
     }
 
@@ -78,23 +78,23 @@ impl Int {
     pub fn u64(&self) -> Option<u64> {
         match *self {
             Int::Pos(n) => Some(n),
-            _           => None
+            _ => None,
         }
     }
 }
 
-/// A unification of plain and indefinitly sized strings.
+/// A unification of plain and indefinitely sized strings.
 #[derive(Clone, PartialEq, PartialOrd, Eq, Ord, Debug, Hash)]
 pub enum Text {
     Text(String),
-    Chunks(LinkedList<String>)
+    Chunks(LinkedList<String>),
 }
 
-/// A unification of plain an indefinitly sized byte strings.
+/// A unification of plain an indefinitely sized byte strings.
 #[derive(Clone, PartialEq, PartialOrd, Eq, Ord, Debug, Hash)]
 pub enum Bytes {
     Bytes(Vec<u8>),
-    Chunks(LinkedList<Vec<u8>>)
+    Chunks(LinkedList<Vec<u8>>),
 }
 
 /// Most simple types (e.g. `bool` are covered elsewhere) but this
@@ -103,7 +103,7 @@ pub enum Bytes {
 #[derive(Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Debug, Hash)]
 pub enum Simple {
     Unassigned(u8),
-    Reserved(u8)
+    Reserved(u8),
 }
 
 /// CBOR allows heterogenous keys in objects. This enum unifies
@@ -113,7 +113,7 @@ pub enum Key {
     Bool(bool),
     Bytes(Bytes),
     Int(Int),
-    Text(Text)
+    Text(Text),
 }
 
 impl Key {
@@ -126,11 +126,11 @@ impl Key {
     }
 }
 
-/// A `Cursor` allows conventient navigation in a `Value` AST.
+/// A `Cursor` allows convenient navigation in a `Value` AST.
 /// `Value`s can be converted to native Rust types if possible and
 /// collections can be traversed using `at` or `get`.
 pub struct Cursor<'r> {
-    value: Option<&'r Value>
+    value: Option<&'r Value>,
 }
 
 impl<'r> Cursor<'r> {
@@ -145,14 +145,14 @@ impl<'r> Cursor<'r> {
     pub fn at(&self, i: usize) -> Cursor<'r> {
         match self.value {
             Some(&Value::Array(ref a)) => Cursor::of(a.get(i)),
-            _                          => Cursor::of(None)
+            _ => Cursor::of(None),
         }
     }
 
     pub fn get(&self, k: Key) -> Cursor<'r> {
         match self.value {
             Some(&Value::Map(ref m)) => Cursor::of(m.get(&k)),
-            _                        => Cursor::of(None)
+            _ => Cursor::of(None),
         }
     }
 
@@ -167,135 +167,135 @@ impl<'r> Cursor<'r> {
     pub fn opt(&self) -> Option<Cursor<'r>> {
         match self.value {
             Some(&Value::Null) => None,
-            Some(ref v)        => Some(Cursor::new(v)),
-            _                  => None
+            Some(ref v) => Some(Cursor::new(v)),
+            _ => None,
         }
     }
 
     pub fn maybe(&self) -> Option<Cursor<'r>> {
         match self.value {
             Some(&Value::Undefined) => None,
-            Some(ref v)             => Some(Cursor::new(v)),
-            _                       => None
+            Some(ref v) => Some(Cursor::new(v)),
+            _ => None,
         }
     }
 
     pub fn bool(&self) -> Option<bool> {
         match self.value {
             Some(&Value::Bool(x)) => Some(x),
-            _                     => None
+            _ => None,
         }
     }
 
     pub fn bytes(&self) -> Option<&Bytes> {
         match self.value {
             Some(&Value::Bytes(ref x)) => Some(x),
-            _                          => None
+            _ => None,
         }
     }
 
     pub fn bytes_plain(&self) -> Option<&Vec<u8>> {
         match self.value {
             Some(&Value::Bytes(Bytes::Bytes(ref x))) => Some(x),
-            _                                        => None
+            _ => None,
         }
     }
 
     pub fn bytes_chunked(&self) -> Option<&LinkedList<Vec<u8>>> {
         match self.value {
             Some(&Value::Bytes(Bytes::Chunks(ref x))) => Some(x),
-            _                                         => None
+            _ => None,
         }
     }
 
     pub fn text(&self) -> Option<&Text> {
         match self.value {
             Some(&Value::Text(ref x)) => Some(x),
-            _                         => None
+            _ => None,
         }
     }
 
     pub fn text_plain(&self) -> Option<&String> {
         match self.value {
             Some(&Value::Text(Text::Text(ref x))) => Some(x),
-            _                                     => None
+            _ => None,
         }
     }
 
     pub fn text_chunked(&self) -> Option<&LinkedList<String>> {
         match self.value {
             Some(&Value::Text(Text::Chunks(ref x))) => Some(x),
-            _                                       => None
+            _ => None,
         }
     }
 
     pub fn float32(&self) -> Option<f32> {
         match self.value {
             Some(&Value::F32(x)) => Some(x),
-            _                    => None
+            _ => None,
         }
     }
 
     pub fn float64(&self) -> Option<f64> {
         match self.value {
             Some(&Value::F64(x)) => Some(x),
-            _                    => None
+            _ => None,
         }
     }
 
     pub fn u8(&self) -> Option<u8> {
         match self.value {
             Some(&Value::U8(x)) => Some(x),
-            _                   => None
+            _ => None,
         }
     }
 
     pub fn u16(&self) -> Option<u16> {
         match self.value {
             Some(&Value::U16(x)) => Some(x),
-            _                    => None
+            _ => None,
         }
     }
 
     pub fn u32(&self) -> Option<u32> {
         match self.value {
             Some(&Value::U32(x)) => Some(x),
-            _                    => None
+            _ => None,
         }
     }
 
     pub fn u64(&self) -> Option<u64> {
         match self.value {
             Some(&Value::U64(x)) => Some(x),
-            _                    => None
+            _ => None,
         }
     }
 
     pub fn i8(&self) -> Option<i8> {
         match self.value {
             Some(&Value::I8(x)) => Some(x),
-            _                   => None
+            _ => None,
         }
     }
 
     pub fn i16(&self) -> Option<i16> {
         match self.value {
             Some(&Value::I16(x)) => Some(x),
-            _                    => None
+            _ => None,
         }
     }
 
     pub fn i32(&self) -> Option<i32> {
         match self.value {
             Some(&Value::I32(x)) => Some(x),
-            _                    => None
+            _ => None,
         }
     }
 
     pub fn i64(&self) -> Option<i64> {
         match self.value {
             Some(&Value::I64(x)) => Some(x),
-            _                    => None
+            _ => None,
         }
     }
 }
@@ -306,55 +306,50 @@ impl<'r> Cursor<'r> {
 pub fn check(value: &Value) -> bool {
     fn fun(t: Tag, b: &Value) -> bool {
         match (t, b) {
-            (Tag::DateTime, &Value::Text(_))        => true,
-            (Tag::Timestamp, &Value::U8(_))         => true,
-            (Tag::Timestamp, &Value::U16(_))        => true,
-            (Tag::Timestamp, &Value::U32(_))        => true,
-            (Tag::Timestamp, &Value::U64(_))        => true,
-            (Tag::Timestamp, &Value::I8(_))         => true,
-            (Tag::Timestamp, &Value::I16(_))        => true,
-            (Tag::Timestamp, &Value::I32(_))        => true,
-            (Tag::Timestamp, &Value::I64(_))        => true,
-            (Tag::Timestamp, &Value::F32(_))        => true,
-            (Tag::Timestamp, &Value::F64(_))        => true,
-            (Tag::Bignum, &Value::Bytes(_))         => true,
+            (Tag::DateTime, &Value::Text(_)) => true,
+            (Tag::Timestamp, &Value::U8(_)) => true,
+            (Tag::Timestamp, &Value::U16(_)) => true,
+            (Tag::Timestamp, &Value::U32(_)) => true,
+            (Tag::Timestamp, &Value::U64(_)) => true,
+            (Tag::Timestamp, &Value::I8(_)) => true,
+            (Tag::Timestamp, &Value::I16(_)) => true,
+            (Tag::Timestamp, &Value::I32(_)) => true,
+            (Tag::Timestamp, &Value::I64(_)) => true,
+            (Tag::Timestamp, &Value::F32(_)) => true,
+            (Tag::Timestamp, &Value::F64(_)) => true,
+            (Tag::Bignum, &Value::Bytes(_)) => true,
             (Tag::NegativeBignum, &Value::Bytes(_)) => true,
-            (Tag::ToBase64, _)                      => true,
-            (Tag::ToBase64Url, _)                   => true,
-            (Tag::ToBase16, _)                      => true,
-            (Tag::Cbor, &Value::Bytes(_))           => true,
-            (Tag::Uri, &Value::Text(_))             => true,
-            (Tag::Base64, &Value::Text(_))          => true,
-            (Tag::Base64Url, &Value::Text(_))       => true,
-            (Tag::Regex, &Value::Text(_))           => true,
-            (Tag::Mime, &Value::Text(_))            => true,
-            (Tag::CborSelf, _)                      => true,
-            (Tag::Decimal, &Value::Array(ref a))
-            | (Tag::Bigfloat, &Value::Array(ref a)) => {
+            (Tag::ToBase64, _) => true,
+            (Tag::ToBase64Url, _) => true,
+            (Tag::ToBase16, _) => true,
+            (Tag::Cbor, &Value::Bytes(_)) => true,
+            (Tag::Uri, &Value::Text(_)) => true,
+            (Tag::Base64, &Value::Text(_)) => true,
+            (Tag::Base64Url, &Value::Text(_)) => true,
+            (Tag::Regex, &Value::Text(_)) => true,
+            (Tag::Mime, &Value::Text(_)) => true,
+            (Tag::CborSelf, _) => true,
+            (Tag::Decimal, &Value::Array(ref a)) | (Tag::Bigfloat, &Value::Array(ref a)) => {
                 if a.len() != 2 {
-                    return false
+                    return false;
                 }
-                let is_integral = |v: &Value| {
-                    match *v {
-                        Value::U8(_) | Value::U16(_) | Value::U32(_) | Value::U64(_) => true,
-                        Value::I8(_) | Value::I16(_) | Value::I32(_) | Value::I64(_) => true,
-                        _                                                            => false
-                    }
+                let is_integral = |v: &Value| match *v {
+                    Value::U8(_) | Value::U16(_) | Value::U32(_) | Value::U64(_) => true,
+                    Value::I8(_) | Value::I16(_) | Value::I32(_) | Value::I64(_) => true,
+                    _ => false,
                 };
-                let is_bignum = |v: &Value| {
-                    fun(Tag::Bignum, v) || fun(Tag::NegativeBignum, v)
-                };
+                let is_bignum = |v: &Value| fun(Tag::Bignum, v) || fun(Tag::NegativeBignum, v);
                 let ref e = a[0];
                 let ref m = a[1];
                 is_integral(e) && (is_integral(m) || is_bignum(m))
             }
             (Tag::Unassigned(_), _) => true,
-            _                       => false
+            _ => false,
         }
     }
 
     match *value {
         Value::Tagged(t, ref b) => fun(t, &*b),
-        _                       => false
+        _ => false,
     }
 }

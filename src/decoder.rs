@@ -33,8 +33,6 @@
 //! # Example 2: Direct decoding (nested array)
 //!
 //! ```
-//! extern crate cbor;
-//! extern crate rustc_serialize;
 //!
 //! use cbor::{Config, Decoder};
 //! use rustc_serialize::hex::FromHex;
@@ -58,9 +56,6 @@
 //! # Example 3: Generic decoding
 //!
 //! ```
-//! extern crate cbor;
-//! extern crate rustc_serialize;
-//!
 //! use cbor::{Config, GenericDecoder};
 //! use cbor::value::{self, Key};
 //! use rustc_serialize::hex::FromHex;
@@ -86,19 +81,19 @@
 //! assert_eq!(None, opt(d.u8()).unwrap())
 //! ```
 
+use crate::skip::Skip;
+use crate::slice::{ReadSlice, ReadSliceError};
+use crate::types::{Tag, Type};
+use crate::value::{self, Bytes, Int, Key, Simple, Text, Value};
 use byteorder::{BigEndian, ReadBytesExt};
-use slice::{ReadSlice, ReadSliceError};
 use std::collections::{BTreeMap, LinkedList};
-use std::str::{from_utf8, Utf8Error};
 use std::error::Error;
 use std::f32;
 use std::fmt;
-use std::{i8, i16, i32, i64};
 use std::io;
+use std::str::{from_utf8, Utf8Error};
 use std::string;
-use skip::Skip;
-use types::{Tag, Type};
-use value::{self, Int, Bytes, Key, Simple, Text, Value};
+use std::{i16, i32, i64, i8};
 
 // Decoder Configuration ////////////////////////////////////////////////////
 
@@ -125,18 +120,18 @@ pub struct Config {
     /// Ignore `Tag`s when decoding `Value`s
     pub skip_tags: bool,
     /// Validate `Value` type matches `Tag`.
-    pub check_tags: bool
+    pub check_tags: bool,
 }
 
-const DEFAULT_CONFIG: Config = Config
-    { max_len_array: 1000
-    , max_len_bytes: 0x500000
-    , max_len_text: 0x500000
-    , max_size_map: 1000
-    , max_nesting: 16
-    , skip_tags: false
-    , check_tags: true
-    };
+const DEFAULT_CONFIG: Config = Config {
+    max_len_array: 1000,
+    max_len_bytes: 0x500000,
+    max_len_text: 0x500000,
+    max_size_map: 1000,
+    max_nesting: 16,
+    skip_tags: false,
+    check_tags: true,
+};
 
 impl Config {
     /// Create default configuration with
@@ -148,7 +143,9 @@ impl Config {
     /// - `max_nesting` = 16
     /// - `skip_tags` = false
     /// - `check_tags` = true
-    pub fn default() -> Config { DEFAULT_CONFIG }
+    pub fn default() -> Config {
+        DEFAULT_CONFIG
+    }
 }
 
 // Decode Error Type ////////////////////////////////////////////////////////
@@ -181,7 +178,7 @@ pub enum DecodeError {
     /// decoding an indefinite object.
     UnexpectedBreak,
     /// Some other error.
-    Other(Box<Error + Send + Sync>)
+    Other(Box<dyn Error + Send + Sync>),
 }
 
 /// When decoding an optional item, i.e. a `Null` value has to be
@@ -189,8 +186,14 @@ pub enum DecodeError {
 /// other value to `Some(value)`.
 pub fn opt<A>(r: DecodeResult<A>) -> DecodeResult<Option<A>> {
     match r {
-        Ok(x)  => Ok(Some(x)),
-        Err(e) => if is_null(&e) { Ok(None) } else { Err(e) }
+        Ok(x) => Ok(Some(x)),
+        Err(e) => {
+            if is_null(&e) {
+                Ok(None)
+            } else {
+                Err(e)
+            }
+        }
     }
 }
 
@@ -198,8 +201,14 @@ pub fn opt<A>(r: DecodeResult<A>) -> DecodeResult<Option<A>> {
 /// will map `Undefined` to `None` and any other value to `Some(value)`.
 pub fn maybe<A>(r: DecodeResult<A>) -> DecodeResult<Option<A>> {
     match r {
-        Ok(x)  => Ok(Some(x)),
-        Err(e) => if is_undefined(&e) { Ok(None) } else { Err(e) }
+        Ok(x) => Ok(Some(x)),
+        Err(e) => {
+            if is_undefined(&e) {
+                Ok(None)
+            } else {
+                Err(e)
+            }
+        }
     }
 }
 
@@ -208,29 +217,44 @@ pub fn maybe<A>(r: DecodeResult<A>) -> DecodeResult<Option<A>> {
 /// conveniently.
 pub fn or_break<A>(r: DecodeResult<A>) -> DecodeResult<Option<A>> {
     match r {
-        Ok(x)  => Ok(Some(x)),
-        Err(e) => if is_break(&e) { Ok(None) } else { Err(e) }
+        Ok(x) => Ok(Some(x)),
+        Err(e) => {
+            if is_break(&e) {
+                Ok(None)
+            } else {
+                Err(e)
+            }
+        }
     }
 }
 
 fn is_break(e: &DecodeError) -> bool {
     match *e {
-        DecodeError::UnexpectedType { datatype: Type::Break, .. } => true,
-        _ => false
+        DecodeError::UnexpectedType {
+            datatype: Type::Break,
+            ..
+        } => true,
+        _ => false,
     }
 }
 
 fn is_null(e: &DecodeError) -> bool {
     match *e {
-        DecodeError::UnexpectedType { datatype: Type::Null, .. } => true,
-        _ => false
+        DecodeError::UnexpectedType {
+            datatype: Type::Null,
+            ..
+        } => true,
+        _ => false,
     }
 }
 
 fn is_undefined(e: &DecodeError) -> bool {
     match *e {
-        DecodeError::UnexpectedType { datatype: Type::Undefined, .. } => true,
-        _ => false
+        DecodeError::UnexpectedType {
+            datatype: Type::Undefined,
+            ..
+        } => true,
+        _ => false,
     }
 }
 
@@ -238,17 +262,28 @@ impl fmt::Display for DecodeError {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match *self {
             DecodeError::DuplicateKey(ref k) => write!(f, "DecodeError: duplicate key: {:?}", *k),
-            DecodeError::IntOverflow(n)      => write!(f, "DecodeError: integer overflow: {}", n),
-            DecodeError::InvalidKey(ref k)   => write!(f, "DecodeError: unsuitable map key: {:?}", *k),
-            DecodeError::InvalidTag(ref v)   => write!(f, "DecodeError: value does not match tag: {:?}", *v),
-            DecodeError::InvalidUtf8(ref e)  => write!(f, "DecodeError: Invalid UTF-8 encoding: {}", *e),
-            DecodeError::IoError(ref e)      => write!(f, "DecodeError: I/O error: {}", *e),
-            DecodeError::TooNested           => write!(f, "DecodeError: value is too nested"),
-            DecodeError::UnexpectedEOF       => write!(f, "DecodeError: unexpected end-of-file"),
-            DecodeError::UnexpectedBreak     => write!(f, "DecodeError: unexpected break"),
-            DecodeError::Other(ref e)        => write!(f, "DecodeError: other: {:?}", e),
-            DecodeError::TooLong{max:m, actual:a} => write!(f, "DecodeError: value is too long {} (max={})", a, m),
-            DecodeError::UnexpectedType{datatype:t, info:i} => write!(f, "DecodeError: unexpected type {:?} (info={})", t, i)
+            DecodeError::IntOverflow(n) => write!(f, "DecodeError: integer overflow: {}", n),
+            DecodeError::InvalidKey(ref k) => {
+                write!(f, "DecodeError: unsuitable map key: {:?}", *k)
+            }
+            DecodeError::InvalidTag(ref v) => {
+                write!(f, "DecodeError: value does not match tag: {:?}", *v)
+            }
+            DecodeError::InvalidUtf8(ref e) => {
+                write!(f, "DecodeError: Invalid UTF-8 encoding: {}", *e)
+            }
+            DecodeError::IoError(ref e) => write!(f, "DecodeError: I/O error: {}", *e),
+            DecodeError::TooNested => write!(f, "DecodeError: value is too nested"),
+            DecodeError::UnexpectedEOF => write!(f, "DecodeError: unexpected end-of-file"),
+            DecodeError::UnexpectedBreak => write!(f, "DecodeError: unexpected break"),
+            DecodeError::Other(ref e) => write!(f, "DecodeError: other: {:?}", e),
+            DecodeError::TooLong { max: m, actual: a } => {
+                write!(f, "DecodeError: value is too long {} (max={})", a, m)
+            }
+            DecodeError::UnexpectedType {
+                datatype: t,
+                info: i,
+            } => write!(f, "DecodeError: unexpected type {:?} (info={})", t, i),
         }
     }
 }
@@ -256,27 +291,27 @@ impl fmt::Display for DecodeError {
 impl Error for DecodeError {
     fn description(&self) -> &str {
         match *self {
-            DecodeError::DuplicateKey(_)    => "duplicate key in objects",
-            DecodeError::IntOverflow(_)     => "integer overflow",
-            DecodeError::InvalidKey(_)      => "invalid object key",
-            DecodeError::InvalidTag(_)      => "invalid tag",
-            DecodeError::InvalidUtf8(_)     => "invalid utf-8",
-            DecodeError::IoError(_)         => "i/o error",
-            DecodeError::TooNested          => "too deeply nested objects/arrays",
-            DecodeError::UnexpectedEOF      => "unexpected eof",
-            DecodeError::UnexpectedBreak    => "unexpected break",
-            DecodeError::Other(_)           => "other error",
-            DecodeError::TooLong{..}        => "value is too long",
-            DecodeError::UnexpectedType{..} => "unexpected type"
+            DecodeError::DuplicateKey(_) => "duplicate key in objects",
+            DecodeError::IntOverflow(_) => "integer overflow",
+            DecodeError::InvalidKey(_) => "invalid object key",
+            DecodeError::InvalidTag(_) => "invalid tag",
+            DecodeError::InvalidUtf8(_) => "invalid utf-8",
+            DecodeError::IoError(_) => "i/o error",
+            DecodeError::TooNested => "too deeply nested objects/arrays",
+            DecodeError::UnexpectedEOF => "unexpected eof",
+            DecodeError::UnexpectedBreak => "unexpected break",
+            DecodeError::Other(_) => "other error",
+            DecodeError::TooLong { .. } => "value is too long",
+            DecodeError::UnexpectedType { .. } => "unexpected type",
         }
     }
 
-    fn cause(&self) -> Option<&Error> {
+    fn cause(&self) -> Option<&dyn Error> {
         match *self {
-            DecodeError::IoError(ref e)     => Some(e),
+            DecodeError::IoError(ref e) => Some(e),
             DecodeError::InvalidUtf8(ref e) => Some(e),
-            DecodeError::Other(ref e)       => Some(&**e),
-            _                               => None
+            DecodeError::Other(ref e) => Some(&**e),
+            _ => None,
         }
     }
 }
@@ -303,7 +338,7 @@ impl From<ReadSliceError> for DecodeError {
     fn from(e: ReadSliceError) -> DecodeError {
         match e {
             ReadSliceError::InsufficientData => DecodeError::UnexpectedEOF,
-            ReadSliceError::IoError(e)       => DecodeError::IoError(e)
+            ReadSliceError::IoError(e) => DecodeError::IoError(e),
         }
     }
 }
@@ -312,23 +347,23 @@ impl From<ReadSliceError> for DecodeError {
 
 // Like `read_signed` but always using `read_u8`
 macro_rules! read_signed_byte {
-    ($this: ident, $from_type: ty, $to: ident, $to_type: ty) => ({
-        $this.reader.read_u8()
-            .map_err(From::from)
-            .and_then(|n| {
-                if n > $to::MAX as $from_type {
-                    Err(DecodeError::IntOverflow(n as u64))
-                } else {
-                    Ok(-1 - n as $to_type)
-                }
-            })
-    });
+    ($this: ident, $from_type: ty, $to: ident, $to_type: ty) => {{
+        $this.reader.read_u8().map_err(From::from).and_then(|n| {
+            if n > $to::MAX as $from_type {
+                Err(DecodeError::IntOverflow(n as u64))
+            } else {
+                Ok(-1 - n as $to_type)
+            }
+        })
+    }};
 }
 
 // Read from reader, check value range and map to negative integer.
 macro_rules! read_signed {
-    ($this: ident, $from: ident, $from_type: ty, $to: ident, $to_type: ty) => ({
-        $this.reader.$from::<BigEndian>()
+    ($this: ident, $from: ident, $from_type: ty, $to: ident, $to_type: ty) => {{
+        $this
+            .reader
+            .$from::<BigEndian>()
             .map_err(From::from)
             .and_then(|n| {
                 if n > $to::MAX as $from_type {
@@ -337,21 +372,20 @@ macro_rules! read_signed {
                     Ok(-1 - n as $to_type)
                 }
             })
-    });
+    }};
 }
 
 // Read unsigned integer, check value range and cast to target type.
 macro_rules! cast_unsigned {
-    ($this: ident, $from: ident, $info: ident, $from_type: ty, $to: ident, $to_type: ty) => ({
-        $this.$from($info)
-            .and_then(|n| {
-                if n > $to::MAX as $from_type {
-                    Err(DecodeError::IntOverflow(n as u64))
-                } else {
-                    Ok(n as $to_type)
-                }
-            })
-    });
+    ($this: ident, $from: ident, $info: ident, $from_type: ty, $to: ident, $to_type: ty) => {{
+        $this.$from($info).and_then(|n| {
+            if n > $to::MAX as $from_type {
+                Err(DecodeError::IntOverflow(n as u64))
+            } else {
+                Ok(n as $to_type)
+            }
+        })
+    }};
 }
 
 // Decoder Kernel ///////////////////////////////////////////////////////////
@@ -364,7 +398,7 @@ pub type TypeInfo = (Type, u8);
 /// It forms the basis on which `Decoder` and `GenericDecoder` add logic
 /// for handling `Tag`s, heterogenous data and generic value decoding.
 pub struct Kernel<R> {
-    reader: R
+    reader: R,
 }
 
 impl<R: ReadBytesExt> Kernel<R> {
@@ -383,8 +417,8 @@ impl<R: ReadBytesExt> Kernel<R> {
     pub fn simple(&mut self, ti: &TypeInfo) -> DecodeResult<Simple> {
         match ti.0 {
             Type::Unassigned { major: 7, info: a } => Ok(Simple::Unassigned(a)),
-            Type::Reserved   { major: 7, info: a } => Ok(Simple::Reserved(a)),
-            _                                      => unexpected_type(ti)
+            Type::Reserved { major: 7, info: a } => Ok(Simple::Reserved(a)),
+            _ => unexpected_type(ti),
         }
     }
 
@@ -392,111 +426,119 @@ impl<R: ReadBytesExt> Kernel<R> {
         match *ti {
             (Type::Bool, 20) => Ok(false),
             (Type::Bool, 21) => Ok(true),
-            _                => unexpected_type(ti)
+            _ => unexpected_type(ti),
         }
     }
 
     pub fn u8(&mut self, ti: &TypeInfo) -> DecodeResult<u8> {
         match *ti {
-            (Type::UInt8, n @ 0...23) => Ok(n),
+            (Type::UInt8, n @ 0..=23) => Ok(n),
             (Type::UInt8, 24) => self.reader.read_u8().map_err(From::from),
-            _                 => unexpected_type(ti)
+            _ => unexpected_type(ti),
         }
     }
 
     pub fn u16(&mut self, ti: &TypeInfo) -> DecodeResult<u16> {
         match *ti {
-            (Type::UInt8, n @ 0...23) => Ok(n as u16),
-            (Type::UInt8, 24)  => self.reader.read_u8().map(|n| n as u16).map_err(From::from),
+            (Type::UInt8, n @ 0..=23) => Ok(n as u16),
+            (Type::UInt8, 24) => self.reader.read_u8().map(|n| n as u16).map_err(From::from),
             (Type::UInt16, 25) => self.reader.read_u16::<BigEndian>().map_err(From::from),
-            _                  => unexpected_type(ti)
+            _ => unexpected_type(ti),
         }
     }
 
     pub fn u32(&mut self, ti: &TypeInfo) -> DecodeResult<u32> {
         match *ti {
-            (Type::UInt8, n @ 0...23) => Ok(n as u32),
-            (Type::UInt8, 24)  => self.reader.read_u8().map(|n| n as u32).map_err(From::from),
-            (Type::UInt16, 25) => self.reader.read_u16::<BigEndian>().map(|n| n as u32).map_err(From::from),
+            (Type::UInt8, n @ 0..=23) => Ok(n as u32),
+            (Type::UInt8, 24) => self.reader.read_u8().map(|n| n as u32).map_err(From::from),
+            (Type::UInt16, 25) => self
+                .reader
+                .read_u16::<BigEndian>()
+                .map(|n| n as u32)
+                .map_err(From::from),
             (Type::UInt32, 26) => self.reader.read_u32::<BigEndian>().map_err(From::from),
-            _                  => unexpected_type(ti)
+            _ => unexpected_type(ti),
         }
     }
 
     pub fn u64(&mut self, ti: &TypeInfo) -> DecodeResult<u64> {
         match *ti {
-            (Type::UInt8, n @ 0...23) => Ok(n as u64),
-            (Type::UInt8, 24)  => self.reader.read_u8().map(|n| n as u64).map_err(From::from),
-            (Type::UInt16, 25) => self.reader.read_u16::<BigEndian>().map(|n| n as u64).map_err(From::from),
-            (Type::UInt32, 26) => self.reader.read_u32::<BigEndian>().map(|n| n as u64).map_err(From::from),
+            (Type::UInt8, n @ 0..=23) => Ok(n as u64),
+            (Type::UInt8, 24) => self.reader.read_u8().map(|n| n as u64).map_err(From::from),
+            (Type::UInt16, 25) => self
+                .reader
+                .read_u16::<BigEndian>()
+                .map(|n| n as u64)
+                .map_err(From::from),
+            (Type::UInt32, 26) => self
+                .reader
+                .read_u32::<BigEndian>()
+                .map(|n| n as u64)
+                .map_err(From::from),
             (Type::UInt64, 27) => self.reader.read_u64::<BigEndian>().map_err(From::from),
-            _                  => unexpected_type(ti)
+            _ => unexpected_type(ti),
         }
     }
 
     pub fn i8(&mut self, ti: &TypeInfo) -> DecodeResult<i8> {
         match *ti {
-            (Type::Int8, n @ 0...23) => Ok(-1 - n as i8),
-            (Type::Int8, 24)         => read_signed_byte!(self, u8, i8, i8),
-            (Type::UInt8, _)         => cast_unsigned!(self, u8, ti, u8, i8, i8),
-            _                        => unexpected_type(ti)
+            (Type::Int8, n @ 0..=23) => Ok(-1 - n as i8),
+            (Type::Int8, 24) => read_signed_byte!(self, u8, i8, i8),
+            (Type::UInt8, _) => cast_unsigned!(self, u8, ti, u8, i8, i8),
+            _ => unexpected_type(ti),
         }
     }
 
     pub fn i16(&mut self, ti: &TypeInfo) -> DecodeResult<i16> {
         match *ti {
-            (Type::Int8, n @ 0...23) => Ok(-1 - n as i16),
-            (Type::Int8, 24)         => read_signed_byte!(self, u8, i16, i16),
-            (Type::Int16, 25)        => read_signed!(self, read_u16, u16, i16, i16),
-            (Type::UInt8, _)         => cast_unsigned!(self, u8, ti, u8, i16, i16),
-            (Type::UInt16, _)        => cast_unsigned!(self, u16, ti, u16, i16, i16),
-            _                        => unexpected_type(ti)
+            (Type::Int8, n @ 0..=23) => Ok(-1 - n as i16),
+            (Type::Int8, 24) => read_signed_byte!(self, u8, i16, i16),
+            (Type::Int16, 25) => read_signed!(self, read_u16, u16, i16, i16),
+            (Type::UInt8, _) => cast_unsigned!(self, u8, ti, u8, i16, i16),
+            (Type::UInt16, _) => cast_unsigned!(self, u16, ti, u16, i16, i16),
+            _ => unexpected_type(ti),
         }
     }
 
     pub fn i32(&mut self, ti: &TypeInfo) -> DecodeResult<i32> {
         match *ti {
-            (Type::Int8, n @ 0...23) => Ok(-1 - n as i32),
-            (Type::Int8, 24)         => read_signed_byte!(self, u8, i32, i32),
-            (Type::Int16, 25)        => read_signed!(self, read_u16, u16, i32, i32),
-            (Type::Int32, 26)        => read_signed!(self, read_u32, u32, i32, i32),
-            (Type::UInt8, _)         => cast_unsigned!(self, u8, ti, u8, i32, i32),
-            (Type::UInt16, _)        => cast_unsigned!(self, u16, ti, u16, i32, i32),
-            (Type::UInt32, _)        => cast_unsigned!(self, u32, ti, u32, i32, i32),
-            _                        => unexpected_type(ti)
+            (Type::Int8, n @ 0..=23) => Ok(-1 - n as i32),
+            (Type::Int8, 24) => read_signed_byte!(self, u8, i32, i32),
+            (Type::Int16, 25) => read_signed!(self, read_u16, u16, i32, i32),
+            (Type::Int32, 26) => read_signed!(self, read_u32, u32, i32, i32),
+            (Type::UInt8, _) => cast_unsigned!(self, u8, ti, u8, i32, i32),
+            (Type::UInt16, _) => cast_unsigned!(self, u16, ti, u16, i32, i32),
+            (Type::UInt32, _) => cast_unsigned!(self, u32, ti, u32, i32, i32),
+            _ => unexpected_type(ti),
         }
     }
 
     pub fn i64(&mut self, ti: &TypeInfo) -> DecodeResult<i64> {
         match *ti {
-            (Type::Int8, n @ 0...23) => Ok(-1 - n as i64),
-            (Type::Int8, 24)         => read_signed_byte!(self, u8, i64, i64),
-            (Type::Int16, 25)        => read_signed!(self, read_u16, u16, i64, i64),
-            (Type::Int32, 26)        => read_signed!(self, read_u32, u32, i64, i64),
-            (Type::Int64, 27)        => read_signed!(self, read_u64, u64, i64, i64),
-            (Type::UInt8, _)         => cast_unsigned!(self, u8, ti, u8, i64, i64),
-            (Type::UInt16, _)        => cast_unsigned!(self, u16, ti, u16, i64, i64),
-            (Type::UInt32, _)        => cast_unsigned!(self, u32, ti, u32, i64, i64),
-            (Type::UInt64, _)        => cast_unsigned!(self, u64, ti, u64, i64, i64),
-            _                        => unexpected_type(ti)
+            (Type::Int8, n @ 0..=23) => Ok(-1 - n as i64),
+            (Type::Int8, 24) => read_signed_byte!(self, u8, i64, i64),
+            (Type::Int16, 25) => read_signed!(self, read_u16, u16, i64, i64),
+            (Type::Int32, 26) => read_signed!(self, read_u32, u32, i64, i64),
+            (Type::Int64, 27) => read_signed!(self, read_u64, u64, i64, i64),
+            (Type::UInt8, _) => cast_unsigned!(self, u8, ti, u8, i64, i64),
+            (Type::UInt16, _) => cast_unsigned!(self, u16, ti, u16, i64, i64),
+            (Type::UInt32, _) => cast_unsigned!(self, u32, ti, u32, i64, i64),
+            (Type::UInt64, _) => cast_unsigned!(self, u64, ti, u64, i64, i64),
+            _ => unexpected_type(ti),
         }
     }
 
     pub fn int(&mut self, ti: &TypeInfo) -> DecodeResult<Int> {
         match *ti {
-              (Type::Int8, a)
-            | (Type::Int16, a)
-            | (Type::Int32, a)
-            | (Type::Int64, a) =>
-                self.unsigned(a).map(Int::Neg),
+            (Type::Int8, a) | (Type::Int16, a) | (Type::Int32, a) | (Type::Int64, a) => {
+                self.unsigned(a).map(Int::Neg)
+            }
 
-              (Type::UInt8, a)
-            | (Type::UInt16, a)
-            | (Type::UInt32, a)
-            | (Type::UInt64, a) =>
-                self.unsigned(a).map(Int::Pos),
+            (Type::UInt8, a) | (Type::UInt16, a) | (Type::UInt32, a) | (Type::UInt64, a) => {
+                self.unsigned(a).map(Int::Pos)
+            }
 
-            _ => unexpected_type(ti)
+            _ => unexpected_type(ti),
         }
     }
 
@@ -504,31 +546,37 @@ impl<R: ReadBytesExt> Kernel<R> {
         match ti.0 {
             Type::Float16 => {
                 // Copied from RFC 7049 Appendix D:
-                let half  = self.reader.read_u16::<BigEndian>()?;
-                let exp   = half >> 10 & 0x1F;
-                let mant  = half & 0x3FF;
+                let half = self.reader.read_u16::<BigEndian>()?;
+                let exp = half >> 10 & 0x1F;
+                let mantissa = half & 0x3FF;
                 let value = match exp {
-                    0  => ffi::c_ldexpf(mant as f32, -24),
-                    31 => if mant == 0 { f32::INFINITY } else { f32::NAN },
-                    _  => ffi::c_ldexpf(mant as f32 + 1024.0, exp as isize - 25)
+                    0 => ffi::c_ldexpf(mantissa as f32, -24),
+                    31 => {
+                        if mantissa == 0 {
+                            f32::INFINITY
+                        } else {
+                            f32::NAN
+                        }
+                    }
+                    _ => ffi::c_ldexpf(mantissa as f32 + 1024.0, exp as isize - 25),
                 };
-                Ok(if half & 0x8000 == 0 { value } else { - value })
+                Ok(if half & 0x8000 == 0 { value } else { -value })
             }
-            _ => unexpected_type(ti)
+            _ => unexpected_type(ti),
         }
     }
 
     pub fn f32(&mut self, ti: &TypeInfo) -> DecodeResult<f32> {
         match ti.0 {
             Type::Float32 => self.reader.read_f32::<BigEndian>().map_err(From::from),
-            _             => unexpected_type(ti)
+            _ => unexpected_type(ti),
         }
     }
 
     pub fn f64(&mut self, ti: &TypeInfo) -> DecodeResult<f64> {
         match ti.0 {
             Type::Float64 => self.reader.read_f64::<BigEndian>().map_err(From::from),
-            _             => unexpected_type(ti)
+            _ => unexpected_type(ti),
         }
     }
 
@@ -536,12 +584,20 @@ impl<R: ReadBytesExt> Kernel<R> {
     /// unsigned value following the rules of major type 0.
     pub fn unsigned(&mut self, first: u8) -> DecodeResult<u64> {
         match first {
-            n @ 0...23 => Ok(n as u64),
+            n @ 0..=23 => Ok(n as u64),
             24 => self.reader.read_u8().map(|n| n as u64).map_err(From::from),
-            25 => self.reader.read_u16::<BigEndian>().map(|n| n as u64).map_err(From::from),
-            26 => self.reader.read_u32::<BigEndian>().map(|n| n as u64).map_err(From::from),
+            25 => self
+                .reader
+                .read_u16::<BigEndian>()
+                .map(|n| n as u64)
+                .map_err(From::from),
+            26 => self
+                .reader
+                .read_u32::<BigEndian>()
+                .map(|n| n as u64)
+                .map_err(From::from),
             27 => self.reader.read_u64::<BigEndian>().map_err(From::from),
-            _  => unexpected_type(&(Type::UInt64, first))
+            _ => unexpected_type(&(Type::UInt64, first)),
         }
     }
 
@@ -552,19 +608,23 @@ impl<R: ReadBytesExt> Kernel<R> {
     pub fn raw_data(&mut self, begin: u8, max_len: usize) -> DecodeResult<Vec<u8>> {
         let len = self.unsigned(begin)?;
         if len > max_len as u64 {
-            return Err(DecodeError::TooLong { max: max_len, actual: len })
+            return Err(DecodeError::TooLong {
+                max: max_len,
+                actual: len,
+            });
         }
         let n = len as usize;
         let mut v = vec![0u8; n];
         let mut i = 0;
         while i < n {
             match self.reader.read(&mut v[i..]) {
-                Ok(0)  => return Err(DecodeError::UnexpectedEOF),
-                Ok(j)  => i += j,
-                Err(e) =>
+                Ok(0) => return Err(DecodeError::UnexpectedEOF),
+                Ok(j) => i += j,
+                Err(e) => {
                     if e.kind() != io::ErrorKind::Interrupted {
-                        return Err(DecodeError::IoError(e))
+                        return Err(DecodeError::IoError(e));
                     }
+                }
             }
         }
         Ok(v)
@@ -577,18 +637,22 @@ impl<R: ReadBytesExt> Kernel<R> {
     pub fn read_raw_data(&mut self, begin: u8, buf: &mut [u8]) -> DecodeResult<usize> {
         let len = self.unsigned(begin)?;
         if len > buf.len() as u64 {
-            return Err(DecodeError::TooLong { max: buf.len(), actual: len })
+            return Err(DecodeError::TooLong {
+                max: buf.len(),
+                actual: len,
+            });
         }
         let n = len as usize;
         let mut i = 0;
         while i < n {
             match self.reader.read(&mut buf[i..]) {
-                Ok(0)  => return Err(DecodeError::UnexpectedEOF),
-                Ok(j)  => i += j,
-                Err(e) =>
+                Ok(0) => return Err(DecodeError::UnexpectedEOF),
+                Ok(j) => i += j,
+                Err(e) => {
                     if e.kind() != io::ErrorKind::Interrupted {
-                        return Err(DecodeError::IoError(e))
+                        return Err(DecodeError::IoError(e));
                     }
+                }
             }
         }
         Ok(n)
@@ -603,7 +667,10 @@ impl<R: ReadBytesExt + ReadSlice> Kernel<R> {
     pub fn raw_slice(&mut self, begin: u8, max_len: usize) -> DecodeResult<&[u8]> {
         let len = self.unsigned(begin)?;
         if len > max_len as u64 {
-            return Err(DecodeError::TooLong { max: max_len, actual: len })
+            return Err(DecodeError::TooLong {
+                max: max_len,
+                actual: len,
+            });
         }
         self.reader.read_slice(len as usize).map_err(From::from)
     }
@@ -613,7 +680,7 @@ impl<R: ReadBytesExt + ReadSlice> Kernel<R> {
 mod ffi {
     use libc::c_int;
 
-    extern {
+    extern "C" {
         pub fn ldexpf(x: f32, exp: c_int) -> f32;
     }
 
@@ -624,7 +691,10 @@ mod ffi {
 }
 
 fn unexpected_type<A>(ti: &TypeInfo) -> DecodeResult<A> {
-    Err(DecodeError::UnexpectedType { datatype: ti.0, info: ti.1 })
+    Err(DecodeError::UnexpectedType {
+        datatype: ti.0,
+        info: ti.1,
+    })
 }
 
 // Decoder //////////////////////////////////////////////////////////////////
@@ -632,12 +702,15 @@ fn unexpected_type<A>(ti: &TypeInfo) -> DecodeResult<A> {
 /// The actual decoder type definition
 pub struct Decoder<R> {
     kernel: Kernel<R>,
-    config: Config
+    config: Config,
 }
 
 impl<R: ReadBytesExt> Decoder<R> {
     pub fn new(c: Config, r: R) -> Decoder<R> {
-        Decoder { kernel: Kernel::new(r), config: c }
+        Decoder {
+            kernel: Kernel::new(r),
+            config: c,
+        }
     }
 
     pub fn into_reader(self) -> R {
@@ -714,8 +787,8 @@ impl<R: ReadBytesExt> Decoder<R> {
     pub fn read_bytes(&mut self, b: &mut [u8]) -> DecodeResult<usize> {
         match self.typeinfo()? {
             (Type::Bytes, 31) => unexpected_type(&(Type::Bytes, 31)),
-            (Type::Bytes,  i) => self.kernel.read_raw_data(i, b),
-            ti                => unexpected_type(&ti)
+            (Type::Bytes, i) => self.kernel.read_raw_data(i, b),
+            ti => unexpected_type(&ti),
         }
     }
 
@@ -726,11 +799,11 @@ impl<R: ReadBytesExt> Decoder<R> {
     pub fn bytes(&mut self) -> DecodeResult<Vec<u8>> {
         match self.typeinfo()? {
             (Type::Bytes, 31) => unexpected_type(&(Type::Bytes, 31)),
-            (Type::Bytes,  i) => {
+            (Type::Bytes, i) => {
                 let max = self.config.max_len_bytes;
                 self.kernel.raw_data(i, max)
             }
-            ti => unexpected_type(&ti)
+            ti => unexpected_type(&ti),
         }
     }
 
@@ -738,7 +811,7 @@ impl<R: ReadBytesExt> Decoder<R> {
     pub fn bytes_iter(&mut self) -> DecodeResult<BytesIter<R>> {
         match self.typeinfo()? {
             (Type::Bytes, 31) => Ok(BytesIter { decoder: self }),
-            ti                => unexpected_type(&ti)
+            ti => unexpected_type(&ti),
         }
     }
 
@@ -749,12 +822,12 @@ impl<R: ReadBytesExt> Decoder<R> {
     pub fn text(&mut self) -> DecodeResult<String> {
         match self.typeinfo()? {
             (Type::Text, 31) => unexpected_type(&(Type::Text, 31)),
-            (Type::Text,  i) => {
-                let max  = self.config.max_len_text;
+            (Type::Text, i) => {
+                let max = self.config.max_len_text;
                 let data = self.kernel.raw_data(i, max)?;
                 String::from_utf8(data).map_err(From::from)
             }
-            ti => unexpected_type(&ti)
+            ti => unexpected_type(&ti),
         }
     }
 
@@ -762,7 +835,7 @@ impl<R: ReadBytesExt> Decoder<R> {
     pub fn text_iter(&mut self) -> DecodeResult<TextIter<R>> {
         match self.typeinfo()? {
             (Type::Text, 31) => Ok(TextIter { decoder: self }),
-            ti               => unexpected_type(&ti)
+            ti => unexpected_type(&ti),
         }
     }
 
@@ -771,7 +844,7 @@ impl<R: ReadBytesExt> Decoder<R> {
     pub fn tag(&mut self) -> DecodeResult<Tag> {
         match self.kernel.typeinfo()? {
             (Type::Tagged, i) => self.kernel.unsigned(i).map(Tag::of),
-            ti                => unexpected_type(&ti)
+            ti => unexpected_type(&ti),
         }
     }
 
@@ -783,14 +856,17 @@ impl<R: ReadBytesExt> Decoder<R> {
     pub fn array(&mut self) -> DecodeResult<usize> {
         match self.typeinfo()? {
             (Type::Array, 31) => unexpected_type(&(Type::Array, 31)),
-            (Type::Array,  a) => {
+            (Type::Array, a) => {
                 let len = self.kernel.unsigned(a)?;
                 if len > self.config.max_len_array as u64 {
-                    return Err(DecodeError::TooLong { max: self.config.max_len_array, actual: len })
+                    return Err(DecodeError::TooLong {
+                        max: self.config.max_len_array,
+                        actual: len,
+                    });
                 }
                 Ok(len as usize)
             }
-            ti => unexpected_type(&ti)
+            ti => unexpected_type(&ti),
         }
     }
 
@@ -803,7 +879,7 @@ impl<R: ReadBytesExt> Decoder<R> {
     pub fn array_begin(&mut self) -> DecodeResult<()> {
         match self.typeinfo()? {
             (Type::Array, 31) => Ok(()),
-            ti                => unexpected_type(&ti)
+            ti => unexpected_type(&ti),
         }
     }
 
@@ -815,14 +891,17 @@ impl<R: ReadBytesExt> Decoder<R> {
     pub fn object(&mut self) -> DecodeResult<usize> {
         match self.typeinfo()? {
             (Type::Object, 31) => unexpected_type(&(Type::Object, 31)),
-            (Type::Object,  a) => {
+            (Type::Object, a) => {
                 let len = self.kernel.unsigned(a)?;
                 if len > self.config.max_size_map as u64 {
-                    return Err(DecodeError::TooLong { max: self.config.max_size_map, actual: len })
+                    return Err(DecodeError::TooLong {
+                        max: self.config.max_size_map,
+                        actual: len,
+                    });
                 }
                 Ok(len as usize)
             }
-            ti => unexpected_type(&ti)
+            ti => unexpected_type(&ti),
         }
     }
 
@@ -835,7 +914,7 @@ impl<R: ReadBytesExt> Decoder<R> {
     pub fn object_begin(&mut self) -> DecodeResult<()> {
         match self.typeinfo()? {
             (Type::Object, 31) => Ok(()),
-            ti                 => unexpected_type(&ti)
+            ti => unexpected_type(&ti),
         }
     }
 
@@ -843,11 +922,11 @@ impl<R: ReadBytesExt> Decoder<R> {
     fn typeinfo(&mut self) -> DecodeResult<TypeInfo> {
         fn go<A: ReadBytesExt>(d: &mut Decoder<A>, level: usize) -> DecodeResult<TypeInfo> {
             if level == 0 {
-                return Err(DecodeError::TooNested)
+                return Err(DecodeError::TooNested);
             }
             match d.kernel.typeinfo()? {
                 (Type::Tagged, i) => d.kernel.unsigned(i).and(go(d, level - 1)),
-                ti                => Ok(ti)
+                ti => Ok(ti),
             }
         }
         let start = self.config.max_nesting;
@@ -860,7 +939,7 @@ impl<R: ReadBytesExt + Skip> Decoder<R> {
     ///
     /// Please note that this function does not validate the value hence
     /// it might not even be well-formed CBOR. Instead `skip` is an
-    /// optimisation over `GenericDecoder::value()` and generally only
+    /// optimization over `GenericDecoder::value()` and generally only
     /// determines as much information as necessary to safely skip a value
     /// without keeping all of it in memory.
     pub fn skip(&mut self) -> DecodeResult<()> {
@@ -870,22 +949,22 @@ impl<R: ReadBytesExt + Skip> Decoder<R> {
 
     fn skip_value(&mut self, level: usize) -> DecodeResult<bool> {
         if level == 0 {
-            return Err(DecodeError::TooNested)
+            return Err(DecodeError::TooNested);
         }
         match self.typeinfo()? {
-            (Type::UInt8, n)     => self.kernel.unsigned(n).and(Ok(true)),
-            (Type::UInt16, n)    => self.kernel.unsigned(n).and(Ok(true)),
-            (Type::UInt32, n)    => self.kernel.unsigned(n).and(Ok(true)),
-            (Type::UInt64, n)    => self.kernel.unsigned(n).and(Ok(true)),
-            (Type::Int8, n)      => self.kernel.unsigned(n).and(Ok(true)),
-            (Type::Int16, n)     => self.kernel.unsigned(n).and(Ok(true)),
-            (Type::Int32, n)     => self.kernel.unsigned(n).and(Ok(true)),
-            (Type::Int64, n)     => self.kernel.unsigned(n).and(Ok(true)),
-            (Type::Bool, _)      => Ok(true),
-            (Type::Null, _)      => Ok(true),
+            (Type::UInt8, n) => self.kernel.unsigned(n).and(Ok(true)),
+            (Type::UInt16, n) => self.kernel.unsigned(n).and(Ok(true)),
+            (Type::UInt32, n) => self.kernel.unsigned(n).and(Ok(true)),
+            (Type::UInt64, n) => self.kernel.unsigned(n).and(Ok(true)),
+            (Type::Int8, n) => self.kernel.unsigned(n).and(Ok(true)),
+            (Type::Int16, n) => self.kernel.unsigned(n).and(Ok(true)),
+            (Type::Int32, n) => self.kernel.unsigned(n).and(Ok(true)),
+            (Type::Int64, n) => self.kernel.unsigned(n).and(Ok(true)),
+            (Type::Bool, _) => Ok(true),
+            (Type::Null, _) => Ok(true),
             (Type::Undefined, _) => Ok(true),
-            (Type::Break, _)     => Ok(false),
-            (Type::Float16, _)   => {
+            (Type::Break, _) => Ok(false),
+            (Type::Float16, _) => {
                 self.kernel.reader.skip(2)?;
                 Ok(true)
             }
@@ -898,13 +977,13 @@ impl<R: ReadBytesExt + Skip> Decoder<R> {
                 Ok(true)
             }
             (Type::Bytes, 31) => self.skip_until_break(Type::Bytes).and(Ok(true)),
-            (Type::Bytes, a)  => {
+            (Type::Bytes, a) => {
                 let n = self.kernel.unsigned(a)?;
                 self.kernel.reader.skip(n)?;
                 Ok(true)
             }
             (Type::Text, 31) => self.skip_until_break(Type::Text).and(Ok(true)),
-            (Type::Text, a)  => {
+            (Type::Text, a) => {
                 let n = self.kernel.unsigned(a)?;
                 self.kernel.reader.skip(n)?;
                 Ok(true)
@@ -919,7 +998,7 @@ impl<R: ReadBytesExt + Skip> Decoder<R> {
             }
             (Type::Array, a) => {
                 let n = self.kernel.unsigned(a)?;
-                for _ in 0 .. n {
+                for _ in 0..n {
                     self.skip_value(level - 1)?;
                 }
                 Ok(true)
@@ -929,18 +1008,18 @@ impl<R: ReadBytesExt + Skip> Decoder<R> {
                 // n == number of fields => need to skip over keys and values.
                 // Instead of doubling n we loop twice in order to avoid
                 // overflowing n.
-                for _ in 0 .. n {
+                for _ in 0..n {
                     self.skip_value(level - 1)?;
                 }
-                for _ in 0 .. n {
+                for _ in 0..n {
                     self.skip_value(level - 1)?;
                 }
                 Ok(true)
             }
-            (Type::Unassigned {..}, _) => Ok(true),
-            (Type::Reserved {..}, _)   => Ok(true),
-            ti@(Type::Tagged, _)       => unexpected_type(&ti),
-            ti@(Type::Unknown {..}, _) => unexpected_type(&ti)
+            (Type::Unassigned { .. }, _) => Ok(true),
+            (Type::Reserved { .. }, _) => Ok(true),
+            ti @ (Type::Tagged, _) => unexpected_type(&ti),
+            ti @ (Type::Unknown { .. }, _) => unexpected_type(&ti),
         }
     }
 
@@ -949,10 +1028,10 @@ impl<R: ReadBytesExt + Skip> Decoder<R> {
         loop {
             let (t, a) = self.typeinfo()?;
             if t == Type::Break {
-                break
+                break;
             }
             if t != ty || a == 31 {
-                return unexpected_type(&(t, a))
+                return unexpected_type(&(t, a));
             }
             let n = self.kernel.unsigned(a)?;
             self.kernel.reader.skip(n)?
@@ -969,12 +1048,12 @@ impl<R: ReadBytesExt + ReadSlice> Decoder<R> {
     pub fn text_borrow(&mut self) -> DecodeResult<&str> {
         match self.typeinfo()? {
             (Type::Text, 31) => unexpected_type(&(Type::Text, 31)),
-            (Type::Text,  i) => {
-                let max  = self.config.max_len_text;
+            (Type::Text, i) => {
+                let max = self.config.max_len_text;
                 let data = self.kernel.raw_slice(i, max)?;
                 from_utf8(data).map_err(From::from)
             }
-            ti => unexpected_type(&ti)
+            ti => unexpected_type(&ti),
         }
     }
 
@@ -986,11 +1065,11 @@ impl<R: ReadBytesExt + ReadSlice> Decoder<R> {
     pub fn bytes_borrow(&mut self) -> DecodeResult<&[u8]> {
         match self.typeinfo()? {
             (Type::Bytes, 31) => unexpected_type(&(Type::Bytes, 31)),
-            (Type::Bytes,  i) => {
+            (Type::Bytes, i) => {
                 let max = self.config.max_len_bytes;
                 self.kernel.raw_slice(i, max)
             }
-            ti => unexpected_type(&ti)
+            ti => unexpected_type(&ti),
         }
     }
 }
@@ -999,7 +1078,7 @@ impl<R: ReadBytesExt + ReadSlice> Decoder<R> {
 
 /// Iterator over the chunks of an indefinite bytes item.
 pub struct BytesIter<'r, R: 'r> {
-    decoder: &'r mut Decoder<R>
+    decoder: &'r mut Decoder<R>,
 }
 
 impl<'r, R: 'r + ReadBytesExt> Iterator for BytesIter<'r, R> {
@@ -1007,16 +1086,16 @@ impl<'r, R: 'r + ReadBytesExt> Iterator for BytesIter<'r, R> {
 
     fn next(&mut self) -> Option<DecodeResult<Vec<u8>>> {
         match or_break(self.decoder.bytes()) {
-            Ok(None)    => None,
+            Ok(None) => None,
             Ok(Some(b)) => Some(Ok(b)),
-            Err(e)      => Some(Err(e))
+            Err(e) => Some(Err(e)),
         }
     }
 }
 
 /// Iterator over the chunks of an indefinite text item.
 pub struct TextIter<'r, R: 'r> {
-    decoder: &'r mut Decoder<R>
+    decoder: &'r mut Decoder<R>,
 }
 
 impl<'r, R: 'r + ReadBytesExt> Iterator for TextIter<'r, R> {
@@ -1024,9 +1103,9 @@ impl<'r, R: 'r + ReadBytesExt> Iterator for TextIter<'r, R> {
 
     fn next(&mut self) -> Option<DecodeResult<String>> {
         match or_break(self.decoder.text()) {
-            Ok(None)    => None,
+            Ok(None) => None,
             Ok(Some(b)) => Some(Ok(b)),
-            Err(e)      => Some(Err(e))
+            Err(e) => Some(Err(e)),
         }
     }
 }
@@ -1035,12 +1114,14 @@ impl<'r, R: 'r + ReadBytesExt> Iterator for TextIter<'r, R> {
 
 /// A generic decoder decodes arbitrary CBOR into a `Value` AST.
 pub struct GenericDecoder<R> {
-    decoder: Decoder<R>
+    decoder: Decoder<R>,
 }
 
 impl<R: ReadBytesExt> GenericDecoder<R> {
     pub fn new(c: Config, r: R) -> GenericDecoder<R> {
-        GenericDecoder { decoder: Decoder::new(c, r) }
+        GenericDecoder {
+            decoder: Decoder::new(c, r),
+        }
     }
 
     pub fn from_decoder(d: Decoder<R>) -> GenericDecoder<R> {
@@ -1066,57 +1147,50 @@ impl<R: ReadBytesExt> GenericDecoder<R> {
 
     fn decode_value(&mut self, level: usize) -> DecodeResult<Value> {
         if level == 0 {
-            return Err(DecodeError::TooNested)
+            return Err(DecodeError::TooNested);
         }
         match self.decoder.kernel.typeinfo()? {
-            ti@(Type::UInt8, _)   => self.decoder.kernel.u8(&ti).map(Value::U8),
-            ti@(Type::UInt16, _)  => self.decoder.kernel.u16(&ti).map(Value::U16),
-            ti@(Type::UInt32, _)  => self.decoder.kernel.u32(&ti).map(Value::U32),
-            ti@(Type::UInt64, _)  => self.decoder.kernel.u64(&ti).map(Value::U64),
-            ti@(Type::Int8, _)    =>
-                self.decoder.kernel.i16(&ti)
-                    .map(|n| {
-                        if n > i8::MAX as i16 || n < i8::MIN as i16 {
-                            Value::I16(n)
-                        } else {
-                            Value::I8(n as i8)
-                        }
-                    }),
-            ti@(Type::Int16, _) =>
-                self.decoder.kernel.i32(&ti)
-                    .map(|n| {
-                        if n > i16::MAX as i32 || n < i16::MIN as i32 {
-                            Value::I32(n)
-                        } else {
-                            Value::I16(n as i16)
-                        }
-                    }),
-            ti@(Type::Int32, _) =>
-                self.decoder.kernel.i64(&ti)
-                    .map(|n| {
-                        if n > i32::MAX as i64 || n < i32::MIN as i64 {
-                            Value::I64(n)
-                        } else {
-                            Value::I32(n as i32)
-                        }
-                    }),
-            (Type::Int64, a) =>
-                self.decoder.kernel.unsigned(a)
-                    .map(|n| {
-                        if n > i64::MAX as u64 {
-                            Value::Int(Int::Neg(n))
-                        } else {
-                            Value::I64(-1 - n as i64)
-                        }
-                    }),
-            ti@(Type::Float16, _) => self.decoder.kernel.f16(&ti).map(Value::F32),
-            ti@(Type::Float32, _) => self.decoder.kernel.f32(&ti).map(Value::F32),
-            ti@(Type::Float64, _) => self.decoder.kernel.f64(&ti).map(Value::F64),
-            ti@(Type::Bool, _)    => self.decoder.kernel.bool(&ti).map(Value::Bool),
-            (Type::Null, _)       => Ok(Value::Null),
-            (Type::Undefined, _)  => Ok(Value::Undefined),
-            (Type::Break, _)      => Ok(Value::Break),
-            (Type::Bytes, 31)     => { // indefinite byte string
+            ti @ (Type::UInt8, _) => self.decoder.kernel.u8(&ti).map(Value::U8),
+            ti @ (Type::UInt16, _) => self.decoder.kernel.u16(&ti).map(Value::U16),
+            ti @ (Type::UInt32, _) => self.decoder.kernel.u32(&ti).map(Value::U32),
+            ti @ (Type::UInt64, _) => self.decoder.kernel.u64(&ti).map(Value::U64),
+            ti @ (Type::Int8, _) => self.decoder.kernel.i16(&ti).map(|n| {
+                if n > i8::MAX as i16 || n < i8::MIN as i16 {
+                    Value::I16(n)
+                } else {
+                    Value::I8(n as i8)
+                }
+            }),
+            ti @ (Type::Int16, _) => self.decoder.kernel.i32(&ti).map(|n| {
+                if n > i16::MAX as i32 || n < i16::MIN as i32 {
+                    Value::I32(n)
+                } else {
+                    Value::I16(n as i16)
+                }
+            }),
+            ti @ (Type::Int32, _) => self.decoder.kernel.i64(&ti).map(|n| {
+                if n > i32::MAX as i64 || n < i32::MIN as i64 {
+                    Value::I64(n)
+                } else {
+                    Value::I32(n as i32)
+                }
+            }),
+            (Type::Int64, a) => self.decoder.kernel.unsigned(a).map(|n| {
+                if n > i64::MAX as u64 {
+                    Value::Int(Int::Neg(n))
+                } else {
+                    Value::I64(-1 - n as i64)
+                }
+            }),
+            ti @ (Type::Float16, _) => self.decoder.kernel.f16(&ti).map(Value::F32),
+            ti @ (Type::Float32, _) => self.decoder.kernel.f32(&ti).map(Value::F32),
+            ti @ (Type::Float64, _) => self.decoder.kernel.f64(&ti).map(Value::F64),
+            ti @ (Type::Bool, _) => self.decoder.kernel.bool(&ti).map(Value::Bool),
+            (Type::Null, _) => Ok(Value::Null),
+            (Type::Undefined, _) => Ok(Value::Undefined),
+            (Type::Break, _) => Ok(Value::Break),
+            (Type::Bytes, 31) => {
+                // indefinite byte string
                 let mut i = 0u64;
                 let mut v = LinkedList::new();
                 loop {
@@ -1124,21 +1198,28 @@ impl<R: ReadBytesExt> GenericDecoder<R> {
                         Ok(chunk) => {
                             i += chunk.len() as u64;
                             if i > self.decoder.config.max_len_bytes as u64 {
-                                return Err(DecodeError::TooLong { max: self.decoder.config.max_len_bytes, actual: i })
+                                return Err(DecodeError::TooLong {
+                                    max: self.decoder.config.max_len_bytes,
+                                    actual: i,
+                                });
                             }
                             v.push_back(chunk)
                         }
                         Err(ref e) if is_break(e) => break,
-                        Err(e)                    => return Err(e)
+                        Err(e) => return Err(e),
                     }
                 }
                 Ok(Value::Bytes(Bytes::Chunks(v)))
             }
             (Type::Bytes, a) => {
                 let max = self.decoder.config.max_len_bytes;
-                self.decoder.kernel.raw_data(a, max).map(|x| Value::Bytes(Bytes::Bytes(x)))
+                self.decoder
+                    .kernel
+                    .raw_data(a, max)
+                    .map(|x| Value::Bytes(Bytes::Bytes(x)))
             }
-            (Type::Text, 31) => { // indefinite string
+            (Type::Text, 31) => {
+                // indefinite string
                 let mut i = 0u64;
                 let mut v = LinkedList::new();
                 loop {
@@ -1146,33 +1227,42 @@ impl<R: ReadBytesExt> GenericDecoder<R> {
                         Ok(chunk) => {
                             i += chunk.len() as u64;
                             if i > self.decoder.config.max_len_text as u64 {
-                                return Err(DecodeError::TooLong { max: self.decoder.config.max_len_text, actual: i })
+                                return Err(DecodeError::TooLong {
+                                    max: self.decoder.config.max_len_text,
+                                    actual: i,
+                                });
                             }
                             v.push_back(chunk)
                         }
                         Err(ref e) if is_break(e) => break,
-                        Err(e)                    => return Err(e)
+                        Err(e) => return Err(e),
                     }
                 }
                 Ok(Value::Text(Text::Chunks(v)))
             }
             (Type::Text, a) => {
-                let max  = self.decoder.config.max_len_text;
+                let max = self.decoder.config.max_len_text;
                 let data = self.decoder.kernel.raw_data(a, max)?;
-                String::from_utf8(data).map(|x| Value::Text(Text::Text(x))).map_err(From::from)
+                String::from_utf8(data)
+                    .map(|x| Value::Text(Text::Text(x)))
+                    .map_err(From::from)
             }
-            (Type::Array, 31) => { // indefinite length array
+            (Type::Array, 31) => {
+                // indefinite length array
                 let mut i = 0u64;
                 let mut v = Vec::new();
                 loop {
                     i += 1;
                     if i > self.decoder.config.max_len_array as u64 {
-                        return Err(DecodeError::TooLong { max: self.decoder.config.max_len_array, actual: i })
+                        return Err(DecodeError::TooLong {
+                            max: self.decoder.config.max_len_array,
+                            actual: i,
+                        });
                     }
                     match self.decode_value(level - 1) {
                         Ok(Value::Break) => break,
-                        Ok(x)            => v.push(x),
-                        e                => return e
+                        Ok(x) => v.push(x),
+                        e => return e,
                     }
                 }
                 Ok(Value::Array(v))
@@ -1180,35 +1270,44 @@ impl<R: ReadBytesExt> GenericDecoder<R> {
             (Type::Array, a) => {
                 let len = self.decoder.kernel.unsigned(a)?;
                 if len > self.decoder.config.max_len_array as u64 {
-                    return Err(DecodeError::TooLong { max: self.decoder.config.max_len_array, actual: len })
+                    return Err(DecodeError::TooLong {
+                        max: self.decoder.config.max_len_array,
+                        actual: len,
+                    });
                 }
                 let n = len as usize;
                 let mut v = Vec::with_capacity(n);
-                for _ in 0 .. n {
+                for _ in 0..n {
                     v.push(self.decode_value(level - 1)?);
                 }
                 Ok(Value::Array(v))
             }
-            (Type::Object, 31) => { // indefinite size object
+            (Type::Object, 31) => {
+                // indefinite size object
                 let mut i = 0u64;
                 let mut m = BTreeMap::new();
                 loop {
                     i += 1;
                     if i > self.decoder.config.max_size_map as u64 {
-                        return Err(DecodeError::TooLong { max: self.decoder.config.max_size_map, actual: i })
+                        return Err(DecodeError::TooLong {
+                            max: self.decoder.config.max_size_map,
+                            actual: i,
+                        });
                     }
                     match self.decode_key(level - 1) {
                         Ok(key) => {
                             if m.contains_key(&key) {
-                                return Err(DecodeError::DuplicateKey(key))
+                                return Err(DecodeError::DuplicateKey(key));
                             }
                             match self.decode_value(level - 1)? {
                                 Value::Break => return Err(DecodeError::UnexpectedBreak),
-                                value        => { m.insert(key, value); }
+                                value => {
+                                    m.insert(key, value);
+                                }
                             }
                         }
                         Err(DecodeError::InvalidKey(Value::Break)) => break,
-                        Err(e) => return Err(e)
+                        Err(e) => return Err(e),
                     }
                 }
                 Ok(Value::Map(m))
@@ -1216,14 +1315,17 @@ impl<R: ReadBytesExt> GenericDecoder<R> {
             (Type::Object, a) => {
                 let len = self.decoder.kernel.unsigned(a)?;
                 if len > self.decoder.config.max_size_map as u64 {
-                    return Err(DecodeError::TooLong { max: self.decoder.config.max_size_map, actual: len })
+                    return Err(DecodeError::TooLong {
+                        max: self.decoder.config.max_size_map,
+                        actual: len,
+                    });
                 }
                 let n = len as usize;
                 let mut m = BTreeMap::new();
-                for _ in 0 .. n {
+                for _ in 0..n {
                     let key = self.decode_key(level - 1)?;
                     if m.contains_key(&key) {
-                        return Err(DecodeError::DuplicateKey(key))
+                        return Err(DecodeError::DuplicateKey(key));
                     }
                     m.insert(key, self.decode_value(level - 1)?);
                 }
@@ -1232,51 +1334,52 @@ impl<R: ReadBytesExt> GenericDecoder<R> {
             (Type::Tagged, a) => {
                 let tag = self.decoder.kernel.unsigned(a).map(Tag::of)?;
                 if self.decoder.config.skip_tags {
-                    return self.decode_value(level - 1)
+                    return self.decode_value(level - 1);
                 }
-                let val = self.decode_value(level - 1).map(|v| Value::Tagged(tag, Box::new(v)))?;
+                let val = self
+                    .decode_value(level - 1)
+                    .map(|v| Value::Tagged(tag, Box::new(v)))?;
                 if self.decoder.config.check_tags && !value::check(&val) {
-                    return Err(DecodeError::InvalidTag(val))
+                    return Err(DecodeError::InvalidTag(val));
                 }
                 Ok(val)
             }
             (Type::Unassigned { major: 7, info: a }, _) => Ok(Value::Simple(Simple::Unassigned(a))),
-            (Type::Reserved { major: 7, info: a }, _)   => Ok(Value::Simple(Simple::Reserved(a))),
-            ti => unexpected_type(&ti)
+            (Type::Reserved { major: 7, info: a }, _) => Ok(Value::Simple(Simple::Reserved(a))),
+            ti => unexpected_type(&ti),
         }
     }
 
     fn decode_key(&mut self, level: usize) -> DecodeResult<Key> {
         match self.decode_value(level)? {
-            Value::Bool(x)  => Ok(Key::Bool(x)),
+            Value::Bool(x) => Ok(Key::Bool(x)),
             Value::Bytes(x) => Ok(Key::Bytes(x)),
-            Value::Text(x)  => Ok(Key::Text(x)),
-            Value::I8(x)    => Ok(Key::i64(x as i64)),
-            Value::I16(x)   => Ok(Key::i64(x as i64)),
-            Value::I32(x)   => Ok(Key::i64(x as i64)),
-            Value::I64(x)   => Ok(Key::i64(x)),
-            Value::U8(x)    => Ok(Key::u64(x as u64)),
-            Value::U16(x)   => Ok(Key::u64(x as u64)),
-            Value::U32(x)   => Ok(Key::u64(x as u64)),
-            Value::U64(x)   => Ok(Key::u64(x)),
-            Value::Int(x)   => Ok(Key::Int(x)),
-            other           => Err(DecodeError::InvalidKey(other))
+            Value::Text(x) => Ok(Key::Text(x)),
+            Value::I8(x) => Ok(Key::i64(x as i64)),
+            Value::I16(x) => Ok(Key::i64(x as i64)),
+            Value::I32(x) => Ok(Key::i64(x as i64)),
+            Value::I64(x) => Ok(Key::i64(x)),
+            Value::U8(x) => Ok(Key::u64(x as u64)),
+            Value::U16(x) => Ok(Key::u64(x as u64)),
+            Value::U32(x) => Ok(Key::u64(x as u64)),
+            Value::U64(x) => Ok(Key::u64(x)),
+            Value::Int(x) => Ok(Key::Int(x)),
+            other => Err(DecodeError::InvalidKey(other)),
         }
     }
-
 }
 
 // Tests ////////////////////////////////////////////////////////////////////
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use crate::types::Tag;
+    use crate::value::{self, Int, Key, Simple, Value};
     use rustc_serialize::hex::FromHex;
-    use std::{f32, f64, u64};
     use std::collections::BTreeMap;
     use std::io::Cursor;
-    use super::*;
-    use types::Tag;
-    use value::{self, Int, Key, Simple, Value};
+    use std::{f32, f64, u64};
 
     #[test]
     fn unsigned() {
@@ -1289,8 +1392,14 @@ mod tests {
         assert_eq!(Some(100), decoder("1864").u8().ok());
         assert_eq!(Some(1000), decoder("1903e8").u16().ok());
         assert_eq!(Some(1000000), decoder("1a000f4240").u32().ok());
-        assert_eq!(Some(1000000000000), decoder("1b000000e8d4a51000").u64().ok());
-        assert_eq!(Some(18446744073709551615), decoder("1bffffffffffffffff").u64().ok());
+        assert_eq!(
+            Some(1000000000000),
+            decoder("1b000000e8d4a51000").u64().ok()
+        );
+        assert_eq!(
+            Some(18446744073709551615),
+            decoder("1bffffffffffffffff").u64().ok()
+        );
     }
 
     #[test]
@@ -1326,22 +1435,64 @@ mod tests {
         assert_eq!(Some(Some(24)), decoder("1818").int().ok().map(|n| n.i64()));
         assert_eq!(Some(Some(25)), decoder("1819").int().ok().map(|n| n.i64()));
         assert_eq!(Some(Some(100)), decoder("1864").int().ok().map(|n| n.i64()));
-        assert_eq!(Some(Some(1000)), decoder("1903e8").int().ok().map(|n| n.i64()));
-        assert_eq!(Some(Some(1000000)), decoder("1a000f4240").int().ok().map(|n| n.i64()));
-        assert_eq!(Some(Some(1000000000000)), decoder("1b000000e8d4a51000").int().ok().map(|n| n.i64()));
-        assert_eq!(Some(None), decoder("1bffffffffffffffff").int().ok().map(|n| n.i64()));
-        assert_eq!(Some(Some(0xffffffffffffffff)), decoder("1bffffffffffffffff").int().ok().map(|n| n.u64()));
-        assert_eq!(Some(Some(0x7fffffffffffffff)), decoder("1b7fffffffffffffff").int().ok().map(|n| n.i64()));
-        assert_eq!(Some(Some(-9223372036854775808)), decoder("3b7fffffffffffffff").int().ok().map(|n| n.i64()));
-        assert_eq!(Some(Int::Neg(u64::MAX)), decoder("3bffffffffffffffff").int().ok());
+        assert_eq!(
+            Some(Some(1000)),
+            decoder("1903e8").int().ok().map(|n| n.i64())
+        );
+        assert_eq!(
+            Some(Some(1000000)),
+            decoder("1a000f4240").int().ok().map(|n| n.i64())
+        );
+        assert_eq!(
+            Some(Some(1000000000000)),
+            decoder("1b000000e8d4a51000").int().ok().map(|n| n.i64())
+        );
+        assert_eq!(
+            Some(None),
+            decoder("1bffffffffffffffff").int().ok().map(|n| n.i64())
+        );
+        assert_eq!(
+            Some(Some(0xffffffffffffffff)),
+            decoder("1bffffffffffffffff").int().ok().map(|n| n.u64())
+        );
+        assert_eq!(
+            Some(Some(0x7fffffffffffffff)),
+            decoder("1b7fffffffffffffff").int().ok().map(|n| n.i64())
+        );
+        assert_eq!(
+            Some(Some(-9223372036854775808)),
+            decoder("3b7fffffffffffffff").int().ok().map(|n| n.i64())
+        );
+        assert_eq!(
+            Some(Int::Neg(u64::MAX)),
+            decoder("3bffffffffffffffff").int().ok()
+        );
         assert_eq!(Some(Some(-1)), decoder("20").int().ok().map(|n| n.i64()));
         assert_eq!(Some(Some(-10)), decoder("29").int().ok().map(|n| n.i64()));
-        assert_eq!(Some(Some(-100)), decoder("3863").int().ok().map(|n| n.i64()));
-        assert_eq!(Some(Some(-500)), decoder("3901f3").int().ok().map(|n| n.i64()));
-        assert_eq!(Some(Some(-1000)), decoder("3903e7").int().ok().map(|n| n.i64()));
-        assert_eq!(Some(Some(-343434)), decoder("3a00053d89").int().ok().map(|n| n.i64()));
-        assert_eq!(Some(Some(-23764523654)), decoder("3b000000058879da85").int().ok().map(|n| n.i64()));
-        assert_eq!(Some(Value::Int(Int::Neg(u64::MAX))), gen_decoder("3bffffffffffffffff").value().ok())
+        assert_eq!(
+            Some(Some(-100)),
+            decoder("3863").int().ok().map(|n| n.i64())
+        );
+        assert_eq!(
+            Some(Some(-500)),
+            decoder("3901f3").int().ok().map(|n| n.i64())
+        );
+        assert_eq!(
+            Some(Some(-1000)),
+            decoder("3903e7").int().ok().map(|n| n.i64())
+        );
+        assert_eq!(
+            Some(Some(-343434)),
+            decoder("3a00053d89").int().ok().map(|n| n.i64())
+        );
+        assert_eq!(
+            Some(Some(-23764523654)),
+            decoder("3b000000058879da85").int().ok().map(|n| n.i64())
+        );
+        assert_eq!(
+            Some(Value::Int(Int::Neg(u64::MAX))),
+            gen_decoder("3bffffffffffffffff").value().ok()
+        )
     }
 
     #[test]
@@ -1356,7 +1507,10 @@ mod tests {
         assert!(decoder("f97e00").f16().ok().unwrap().is_nan());
 
         assert_eq!(Some(100000.0), decoder("fa47c35000").f32().ok());
-        assert_eq!(Some(3.4028234663852886e+38), decoder("fa7f7fffff").f32().ok());
+        assert_eq!(
+            Some(3.4028234663852886e+38),
+            decoder("fa7f7fffff").f32().ok()
+        );
         assert_eq!(Some(-4.1), decoder("fbc010666666666666").f64().ok());
 
         assert_eq!(Some(f32::INFINITY), decoder("fa7f800000").f32().ok());
@@ -1364,8 +1518,14 @@ mod tests {
         assert!(decoder("fa7fc00000").f32().ok().unwrap().is_nan());
 
         assert_eq!(Some(1.0e+300), decoder("fb7e37e43c8800759c").f64().ok());
-        assert_eq!(Some(f64::INFINITY), decoder("fb7ff0000000000000").f64().ok());
-        assert_eq!(Some(-f64::INFINITY), decoder("fbfff0000000000000").f64().ok());
+        assert_eq!(
+            Some(f64::INFINITY),
+            decoder("fb7ff0000000000000").f64().ok()
+        );
+        assert_eq!(
+            Some(-f64::INFINITY),
+            decoder("fbfff0000000000000").f64().ok()
+        );
         assert!(decoder("fb7ff8000000000000").f64().ok().unwrap().is_nan())
     }
 
@@ -1384,20 +1544,25 @@ mod tests {
 
     #[test]
     fn bytes() {
-        assert_eq!(Some(vec![1,2,3,4]), decoder("4401020304").bytes().ok())
+        assert_eq!(Some(vec![1, 2, 3, 4]), decoder("4401020304").bytes().ok())
     }
 
     #[test]
     fn read_bytes() {
         let mut buf = [0u8; 4];
         assert_eq!(Some(4), decoder("4401020304").read_bytes(&mut buf).ok());
-        assert_eq!([1,2,3,4], buf)
+        assert_eq!([1, 2, 3, 4], buf)
     }
 
     #[test]
     fn text() {
         let expected1 = String::from("dfsdfsdf\r\nsdf\r\nhello\r\nsdfsfsdfs");
-        assert_eq!(Some(expected1), decoder("781f64667364667364660d0a7364660d0a68656c6c6f0d0a736466736673646673").text().ok());
+        assert_eq!(
+            Some(expected1),
+            decoder("781f64667364667364660d0a7364660d0a68656c6c6f0d0a736466736673646673")
+                .text()
+                .ok()
+        );
 
         let expected2 = String::from("\u{00fc}");
         assert_eq!(Some(expected2), decoder("62c3bc").text().ok());
@@ -1413,13 +1578,23 @@ mod tests {
     #[test]
     fn text_borrow() {
         let expected1 = "dfsdfsdf\r\nsdf\r\nhello\r\nsdfsfsdfs";
-        assert_eq!(Some(expected1), decoder("781f64667364667364660d0a7364660d0a68656c6c6f0d0a736466736673646673").text_borrow().ok());
+        assert_eq!(
+            Some(expected1),
+            decoder("781f64667364667364660d0a7364660d0a68656c6c6f0d0a736466736673646673")
+                .text_borrow()
+                .ok()
+        );
     }
 
     #[test]
     fn bytes_borrow() {
         let expected1 = &b"dfsdfsdf\r\nsdf\r\nhello\r\nsdfsfsdfs"[..];
-        assert_eq!(Some(expected1), decoder("581f64667364667364660d0a7364660d0a68656c6c6f0d0a736466736673646673").bytes_borrow().ok());
+        assert_eq!(
+            Some(expected1),
+            decoder("581f64667364667364660d0a7364660d0a68656c6c6f0d0a736466736673646673")
+                .bytes_borrow()
+                .ok()
+        );
     }
 
     #[test]
@@ -1464,7 +1639,7 @@ mod tests {
         map.insert(String::from("c"), 3u8);
         let mut d = decoder("a3616101616202616303");
         let mut x = BTreeMap::new();
-        for _ in 0 .. d.object().unwrap() {
+        for _ in 0..d.object().unwrap() {
             x.insert(d.text().unwrap(), d.u8().unwrap());
         }
         assert_eq!(map, x);
@@ -1473,15 +1648,21 @@ mod tests {
     #[test]
     fn skip() {
         let mut d = decoder("a66161016162820203616382040561647f657374726561646d696e67ff61659f070405ff61666568656c6c6f");
-        for _ in 0 .. d.object().unwrap() {
+        for _ in 0..d.object().unwrap() {
             match d.text().unwrap().as_ref() {
-                "a" => { d.u8().unwrap(); }
-                "b" => for _ in 0 .. d.array().unwrap() { d.u8().unwrap(); },
+                "a" => {
+                    d.u8().unwrap();
+                }
+                "b" => {
+                    for _ in 0..d.array().unwrap() {
+                        d.u8().unwrap();
+                    }
+                }
                 "c" => d.skip().unwrap(),
                 "d" => d.skip().unwrap(),
                 "e" => d.skip().unwrap(),
                 "f" => d.skip().unwrap(),
-                key => panic!("unexpected key: {}", key)
+                key => panic!("unexpected key: {}", key),
             }
         }
     }
@@ -1491,10 +1672,10 @@ mod tests {
         let mut d = decoder("828301020383010203");
         let outer = d.array().unwrap();
         let mut v = Vec::with_capacity(outer);
-        for _ in 0 .. outer {
+        for _ in 0..outer {
             let inner = d.array().unwrap();
             let mut w = Vec::with_capacity(inner);
-            for _ in 0 .. inner {
+            for _ in 0..inner {
                 w.push(d.u8().unwrap())
             }
             v.push(w)
@@ -1524,11 +1705,11 @@ mod tests {
     fn tagged_value() {
         match gen_decoder("c11a514b67b0").value().ok() {
             Some(Value::Tagged(Tag::Timestamp, ref v)) if **v == Value::U32(1363896240) => (),
-            other => panic!("impossible tagged value: {:?}", other)
+            other => panic!("impossible tagged value: {:?}", other),
         }
         match gen_decoder("c1fb41d452d9ec200000").value().ok() {
             Some(Value::Tagged(Tag::Timestamp, ref v)) if **v == Value::F64(1363896240.5) => (),
-            other => panic!("impossible tagged value: {:?}", other)
+            other => panic!("impossible tagged value: {:?}", other),
         }
     }
 

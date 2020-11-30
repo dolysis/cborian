@@ -1,16 +1,17 @@
 [package]
 name          = "cborian"
-version       = "0.8.0"
-authors       = ["Toralf Wittner <tw@dtex.org>"]
+version       = "0.9.0"
+authors       = ["Toralf Wittner <tw@dtex.org>", "psox <psox(a)st8l.com>"]
 license       = "MPL-2.0"
 description   = "CBOR Codec implementation"
 repository    = "https://github.com/dolysis/cborian"
 documentation = "https://twittner.gitlab.io/cbor-codec/cbor/"
 keywords      = ["cbor", "encoding", "binary"]
 categories    = ["encoding"]
+edition       = "2018"
 
 [lib]
-name = "cbor"
+name = "cborian"
 
 [features]
 random = ["quickcheck"]
@@ -30,6 +31,3 @@ quickcheck_macros = ">= 0.2.21"
 rand              = ">= 0.3"
 rustc-serialize   = ">= 0.3"
 
-[[test]]
-name = "tests"
-path = "tests/lib.rs"

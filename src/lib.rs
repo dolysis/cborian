@@ -5,25 +5,16 @@
 
 //! CBOR (RFC 7049) encoder and decoder implementations.
 
-extern crate byteorder;
-extern crate libc;
-
-#[cfg(test)]
-extern crate rustc_serialize;
-
-#[cfg(feature="random")]
-extern crate quickcheck;
-
-pub mod types;
-pub mod value;
 pub mod decoder;
 pub mod encoder;
 pub mod skip;
 pub mod slice;
+pub mod types;
+pub mod value;
 
-#[cfg(feature="random")]
+#[cfg(feature = "random")]
 pub mod random;
 
-pub use decoder::{Config, Decoder, DecodeError, DecodeResult, GenericDecoder};
-pub use decoder::{opt, maybe, or_break};
-pub use encoder::{Encoder, EncodeError, EncodeResult, GenericEncoder};
+pub use decoder::{maybe, opt, or_break};
+pub use decoder::{Config, DecodeError, DecodeResult, Decoder, GenericDecoder};
+pub use encoder::{EncodeError, EncodeResult, Encoder, GenericEncoder};

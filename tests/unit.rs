@@ -3,26 +3,26 @@
 // the MPL was not distributed with this file, You
 // can obtain one at http://mozilla.org/MPL/2.0/.
 
-use cbor::{Config, GenericDecoder};
-use cbor::value::{Int, Key, Text, Value};
-use rustc_serialize::base64::FromBase64;
-use json::{Json, Decoder, FromJson, DecodeResult};
+use cborian::value::{Int, Key, Text, Value};
+use cborian::{Config, GenericDecoder};
 use json::decoder::ReadIter;
-use std::{f32, f64, i8, i16, i32, i64, u64};
+use json::{DecodeResult, Decoder, FromJson, Json};
+use rustc_serialize::base64::FromBase64;
 use std::fs::File;
+use std::{f32, f64, i16, i32, i64, i8, u64};
 use util;
 
 #[derive(Debug, Clone)]
 struct TestVector {
-    cbor:       String,
-    hex:        String,
-    roundtrip:  bool,
-    decoded:    Option<Json>,
-    diagnostic: Option<Json>
+    cbor: String,
+    hex: String,
+    roundtrip: bool,
+    decoded: Option<Json>,
+    diagnostic: Option<Json>,
 }
 
 impl FromJson for TestVector {
-    fn decode<I: Iterator<Item=char>>(d: &mut Decoder<I>) -> DecodeResult<TestVector> {
+    fn decode<I: Iterator<Item = char>>(d: &mut Decoder<I>) -> DecodeResult<TestVector> {
         object! {
             let decoder = d;
             TestVector {
@@ -40,14 +40,38 @@ impl FromJson for TestVector {
 fn int_min_max() {
     util::identity(|mut e| e.i8(i8::MAX), |mut d| d.i8().unwrap() == i8::MAX);
     util::identity(|mut e| e.i8(i8::MIN), |mut d| d.i8().unwrap() == i8::MIN);
-    util::identity(|mut e| e.i16(i16::MAX), |mut d| d.i16().unwrap() == i16::MAX);
-    util::identity(|mut e| e.i16(i16::MIN), |mut d| d.i16().unwrap() == i16::MIN);
-    util::identity(|mut e| e.i32(i32::MAX), |mut d| d.i32().unwrap() == i32::MAX);
-    util::identity(|mut e| e.i32(i32::MIN), |mut d| d.i32().unwrap() == i32::MIN);
-    util::identity(|mut e| e.i64(i64::MAX), |mut d| d.i64().unwrap() == i64::MAX);
-    util::identity(|mut e| e.i64(i64::MIN), |mut d| d.i64().unwrap() == i64::MIN);
-    util::identity(|mut e| e.int(Int::Neg(u64::MAX)), |mut d| d.int().unwrap() == Int::Neg(u64::MAX));
-    util::identity(|mut e| e.int(Int::Pos(u64::MAX)), |mut d| d.int().unwrap().u64() == Some(u64::MAX));
+    util::identity(
+        |mut e| e.i16(i16::MAX),
+        |mut d| d.i16().unwrap() == i16::MAX,
+    );
+    util::identity(
+        |mut e| e.i16(i16::MIN),
+        |mut d| d.i16().unwrap() == i16::MIN,
+    );
+    util::identity(
+        |mut e| e.i32(i32::MAX),
+        |mut d| d.i32().unwrap() == i32::MAX,
+    );
+    util::identity(
+        |mut e| e.i32(i32::MIN),
+        |mut d| d.i32().unwrap() == i32::MIN,
+    );
+    util::identity(
+        |mut e| e.i64(i64::MAX),
+        |mut d| d.i64().unwrap() == i64::MAX,
+    );
+    util::identity(
+        |mut e| e.i64(i64::MIN),
+        |mut d| d.i64().unwrap() == i64::MIN,
+    );
+    util::identity(
+        |mut e| e.int(Int::Neg(u64::MAX)),
+        |mut d| d.int().unwrap() == Int::Neg(u64::MAX),
+    );
+    util::identity(
+        |mut e| e.int(Int::Pos(u64::MAX)),
+        |mut d| d.int().unwrap().u64() == Some(u64::MAX),
+    );
     assert_eq!(Some(i64::MIN), Int::Neg(i64::MAX as u64).i64());
     assert_eq!(Some(i64::MAX), Int::Pos(i64::MAX as u64).i64());
     assert_eq!(Some(u64::MIN), Int::Pos(u64::MIN).u64());
@@ -66,7 +90,7 @@ fn test_all() {
             if !eq(&x, &val) {
                 panic!("{}: {:?} <> {:?}", v.hex, x, val)
             }
-            continue
+            continue;
         }
         if let Some(Json::String(ref x)) = v.diagnostic {
             if !diag(&x, &val) {
@@ -78,8 +102,8 @@ fn test_all() {
 
 fn eq(a: &Json, b: &Value) -> bool {
     match (a, b) {
-        (&Json::Null,          &Value::Null) => true,
-        (&Json::Bool(x),       &Value::Bool(y)) => x == y,
+        (&Json::Null, &Value::Null) => true,
+        (&Json::Bool(x), &Value::Bool(y)) => x == y,
         (&Json::String(ref x), &Value::Text(Text::Text(ref y))) => x == y,
         (&Json::String(ref x), &Value::Text(Text::Chunks(ref y))) => {
             let mut s = String::new();
@@ -88,25 +112,25 @@ fn eq(a: &Json, b: &Value) -> bool {
             }
             x == &s
         }
-        (&Json::Number(x), y) =>
-            util::as_f64(y)
-                .map(|i| (x - i).abs() < f64::EPSILON)
-                .unwrap_or(false),
-        (&Json::Array(ref x), &Value::Array(ref y)) =>
-            x.iter().zip(y.iter()).all(|(xi, yi)| eq(xi, yi)),
+        (&Json::Number(x), y) => util::as_f64(y)
+            .map(|i| (x - i).abs() < f64::EPSILON)
+            .unwrap_or(false),
+        (&Json::Array(ref x), &Value::Array(ref y)) => {
+            x.iter().zip(y.iter()).all(|(xi, yi)| eq(xi, yi))
+        }
         (&Json::Object(ref x), &Value::Map(ref y)) => {
             for (k, v) in x {
                 if let Some(w) = y.get(&Key::Text(Text::Text(k.clone()))) {
                     if !eq(v, w) {
-                        return false
+                        return false;
                     }
                 } else {
-                    return false
+                    return false;
                 }
             }
             true
         }
-        _ => false
+        _ => false,
     }
 }
 
@@ -117,13 +141,13 @@ fn eq(a: &Json, b: &Value) -> bool {
 // only test a subset of the diagnostic values.
 fn diag(a: &str, b: &Value) -> bool {
     match (a, b) {
-        ("Infinity",  &Value::F32(x)) => x == f32::INFINITY,
-        ("Infinity",  &Value::F64(x)) => x == f64::INFINITY,
+        ("Infinity", &Value::F32(x)) => x == f32::INFINITY,
+        ("Infinity", &Value::F64(x)) => x == f64::INFINITY,
         ("-Infinity", &Value::F32(x)) => x == -f32::INFINITY,
         ("-Infinity", &Value::F64(x)) => x == -f64::INFINITY,
-        ("NaN",       &Value::F32(x)) => x.is_nan(),
-        ("NaN",       &Value::F64(x)) => x.is_nan(),
+        ("NaN", &Value::F32(x)) => x.is_nan(),
+        ("NaN", &Value::F64(x)) => x.is_nan(),
         ("undefined", &Value::Undefined) => true,
-        _ => true // See note [diagnostic]
+        _ => true, // See note [diagnostic]
     }
 }

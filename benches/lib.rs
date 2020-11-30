@@ -21,7 +21,7 @@ fn mk_value(min: usize) -> Vec<u8> {
     let mut g = StdGen::new(ChaChaRng::new_unseeded(), 255);
     let mut e = GenericEncoder::new(Cursor::new(Vec::new()));
     e.borrow_mut().array(min).unwrap();
-    for _ in 0 .. min {
+    for _ in 0..min {
         e.value(&gen_value(3, &mut g)).unwrap()
     }
     e.into_inner().into_writer().into_inner()
@@ -31,7 +31,10 @@ fn mk_value(min: usize) -> Vec<u8> {
 fn random_value_roundtrip(b: &mut Bencher) {
     let mut w = Cursor::new(mk_value(30));
     b.iter(|| {
-        assert!(GenericDecoder::new(Config::default(), &mut w).value().ok().is_some());
+        assert!(GenericDecoder::new(Config::default(), &mut w)
+            .value()
+            .ok()
+            .is_some());
         w.set_position(0);
     });
 }

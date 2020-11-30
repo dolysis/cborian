@@ -66,12 +66,12 @@
 //! }
 //! ```
 
+use crate::types::{Tag, Type};
+use crate::value::{Bytes, Int, Key, Simple, Text, Value};
 use byteorder::{BigEndian, WriteBytesExt};
-use std::io;
 use std::error::Error;
 use std::fmt;
-use types::{Tag, Type};
-use value::{Bytes, Int, Key, Simple, Text, Value};
+use std::io;
 
 // Encoder Error Type ///////////////////////////////////////////////////////
 
@@ -89,17 +89,19 @@ pub enum EncodeError {
     /// independent units. Attempting to do so will trigger this error.
     InvalidValue(Value),
     /// Some other error.
-    Other(Box<Error + Send + Sync>)
+    Other(Box<dyn Error + Send + Sync>),
 }
 
 impl fmt::Display for EncodeError {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match *self {
-            EncodeError::IoError(ref e)            => write!(f, "EncodeError: I/O error: {}", *e),
-            EncodeError::UnexpectedEOF             => write!(f, "EncodeError: unexpected end-of-file"),
-            EncodeError::InvalidValue(ref v)       => write!(f, "EncodeError: invalid value {:?}", v),
-            EncodeError::InvalidSimpleValue(ref s) => write!(f, "EncodeError: invalid simple value {:?}", s),
-            EncodeError::Other(ref e)              => write!(f, "EncodeError: other error: {}", e)
+            EncodeError::IoError(ref e) => write!(f, "EncodeError: I/O error: {}", *e),
+            EncodeError::UnexpectedEOF => write!(f, "EncodeError: unexpected end-of-file"),
+            EncodeError::InvalidValue(ref v) => write!(f, "EncodeError: invalid value {:?}", v),
+            EncodeError::InvalidSimpleValue(ref s) => {
+                write!(f, "EncodeError: invalid simple value {:?}", s)
+            }
+            EncodeError::Other(ref e) => write!(f, "EncodeError: other error: {}", e),
         }
     }
 }
@@ -107,19 +109,19 @@ impl fmt::Display for EncodeError {
 impl Error for EncodeError {
     fn description(&self) -> &str {
         match *self {
-            EncodeError::IoError(_)            => "i/o error",
-            EncodeError::UnexpectedEOF         => "unexpected eof",
-            EncodeError::InvalidValue(_)       => "invalid value",
+            EncodeError::IoError(_) => "i/o error",
+            EncodeError::UnexpectedEOF => "unexpected eof",
+            EncodeError::InvalidValue(_) => "invalid value",
             EncodeError::InvalidSimpleValue(_) => "invalid simple value",
-            EncodeError::Other(_)              => "other error"
+            EncodeError::Other(_) => "other error",
         }
     }
 
-    fn cause(&self) -> Option<&Error> {
+    fn cause(&self) -> Option<&dyn Error> {
         match *self {
             EncodeError::IoError(ref e) => Some(e),
-            EncodeError::Other(ref e)   => Some(&**e),
-            _                           => None
+            EncodeError::Other(ref e) => Some(&**e),
+            _ => None,
         }
     }
 }
@@ -134,7 +136,7 @@ impl From<io::Error> for EncodeError {
 
 /// The actual encoder type definition
 pub struct Encoder<W> {
-    writer: W
+    writer: W,
 }
 
 impl<W: WriteBytesExt> Encoder<W> {
@@ -153,38 +155,56 @@ impl<W: WriteBytesExt> Encoder<W> {
     pub fn u8(&mut self, x: u8) -> EncodeResult {
         let ref mut w = self.writer;
         match x {
-            0...23 => w.write_u8(x).map_err(From::from),
-            _      => w.write_u8(24).and(w.write_u8(x)).map_err(From::from)
+            0..=23 => w.write_u8(x).map_err(From::from),
+            _ => w.write_u8(24).and(w.write_u8(x)).map_err(From::from),
         }
     }
 
     pub fn u16(&mut self, x: u16) -> EncodeResult {
         let ref mut w = self.writer;
         match x {
-            0...23    => w.write_u8(x as u8).map_err(From::from),
-            24...0xFF => w.write_u8(24).and(w.write_u8(x as u8)).map_err(From::from),
-            _         => w.write_u8(25).and(w.write_u16::<BigEndian>(x)).map_err(From::from)
+            0..=23 => w.write_u8(x as u8).map_err(From::from),
+            24..=0xFF => w.write_u8(24).and(w.write_u8(x as u8)).map_err(From::from),
+            _ => w
+                .write_u8(25)
+                .and(w.write_u16::<BigEndian>(x))
+                .map_err(From::from),
         }
     }
 
     pub fn u32(&mut self, x: u32) -> EncodeResult {
         let ref mut w = self.writer;
         match x {
-            0...23         => w.write_u8(x as u8).map_err(From::from),
-            24...0xFF      => w.write_u8(24).and(w.write_u8(x as u8)).map_err(From::from),
-            0x100...0xFFFF => w.write_u8(25).and(w.write_u16::<BigEndian>(x as u16)).map_err(From::from),
-            _              => w.write_u8(26).and(w.write_u32::<BigEndian>(x)).map_err(From::from)
+            0..=23 => w.write_u8(x as u8).map_err(From::from),
+            24..=0xFF => w.write_u8(24).and(w.write_u8(x as u8)).map_err(From::from),
+            0x100..=0xFFFF => w
+                .write_u8(25)
+                .and(w.write_u16::<BigEndian>(x as u16))
+                .map_err(From::from),
+            _ => w
+                .write_u8(26)
+                .and(w.write_u32::<BigEndian>(x))
+                .map_err(From::from),
         }
     }
 
     pub fn u64(&mut self, x: u64) -> EncodeResult {
         let ref mut w = self.writer;
         match x {
-            0...23                => w.write_u8(x as u8).map_err(From::from),
-            24...0xFF             => w.write_u8(24).and(w.write_u8(x as u8)).map_err(From::from),
-            0x100...0xFFFF        => w.write_u8(25).and(w.write_u16::<BigEndian>(x as u16)).map_err(From::from),
-            0x100000...0xFFFFFFFF => w.write_u8(26).and(w.write_u32::<BigEndian>(x as u32)).map_err(From::from),
-            _                     => w.write_u8(27).and(w.write_u64::<BigEndian>(x)).map_err(From::from)
+            0..=23 => w.write_u8(x as u8).map_err(From::from),
+            24..=0xFF => w.write_u8(24).and(w.write_u8(x as u8)).map_err(From::from),
+            0x100..=0xFFFF => w
+                .write_u8(25)
+                .and(w.write_u16::<BigEndian>(x as u16))
+                .map_err(From::from),
+            0x100000..=0xFFFFFFFF => w
+                .write_u8(26)
+                .and(w.write_u32::<BigEndian>(x as u32))
+                .map_err(From::from),
+            _ => w
+                .write_u8(27)
+                .and(w.write_u64::<BigEndian>(x))
+                .map_err(From::from),
         }
     }
 
@@ -194,8 +214,11 @@ impl<W: WriteBytesExt> Encoder<W> {
         } else {
             let ref mut w = self.writer;
             match (-1 - x) as u8 {
-                n @ 0...23 => w.write_u8(0b001_00000 | n).map_err(From::from),
-                n          => w.write_u8(0b001_00000 | 24).and(w.write_u8(n)).map_err(From::from)
+                n @ 0..=23 => w.write_u8(0b001_00000 | n).map_err(From::from),
+                n => w
+                    .write_u8(0b001_00000 | 24)
+                    .and(w.write_u8(n))
+                    .map_err(From::from),
             }
         }
     }
@@ -206,9 +229,15 @@ impl<W: WriteBytesExt> Encoder<W> {
         } else {
             let ref mut w = self.writer;
             match (-1 - x) as u16 {
-                n @ 0...23    => w.write_u8(0b001_00000 | n as u8).map_err(From::from),
-                n @ 24...0xFF => w.write_u8(0b001_00000 | 24).and(w.write_u8(n as u8)).map_err(From::from),
-                n             => w.write_u8(0b001_00000 | 25).and(w.write_u16::<BigEndian>(n)).map_err(From::from)
+                n @ 0..=23 => w.write_u8(0b001_00000 | n as u8).map_err(From::from),
+                n @ 24..=0xFF => w
+                    .write_u8(0b001_00000 | 24)
+                    .and(w.write_u8(n as u8))
+                    .map_err(From::from),
+                n => w
+                    .write_u8(0b001_00000 | 25)
+                    .and(w.write_u16::<BigEndian>(n))
+                    .map_err(From::from),
             }
         }
     }
@@ -219,10 +248,19 @@ impl<W: WriteBytesExt> Encoder<W> {
         } else {
             let ref mut w = self.writer;
             match (-1 - x) as u32 {
-                n @ 0...23         => w.write_u8(0b001_00000 | n as u8).map_err(From::from),
-                n @ 24...0xFF      => w.write_u8(0b001_00000 | 24).and(w.write_u8(n as u8)).map_err(From::from),
-                n @ 0x100...0xFFFF => w.write_u8(0b001_00000 | 25).and(w.write_u16::<BigEndian>(n as u16)).map_err(From::from),
-                n                  => w.write_u8(0b001_00000 | 26).and(w.write_u32::<BigEndian>(n)).map_err(From::from)
+                n @ 0..=23 => w.write_u8(0b001_00000 | n as u8).map_err(From::from),
+                n @ 24..=0xFF => w
+                    .write_u8(0b001_00000 | 24)
+                    .and(w.write_u8(n as u8))
+                    .map_err(From::from),
+                n @ 0x100..=0xFFFF => w
+                    .write_u8(0b001_00000 | 25)
+                    .and(w.write_u16::<BigEndian>(n as u16))
+                    .map_err(From::from),
+                n => w
+                    .write_u8(0b001_00000 | 26)
+                    .and(w.write_u32::<BigEndian>(n))
+                    .map_err(From::from),
             }
         }
     }
@@ -233,11 +271,23 @@ impl<W: WriteBytesExt> Encoder<W> {
         } else {
             let ref mut w = self.writer;
             match (-1 - x) as u64 {
-                n @ 0...23                => w.write_u8(0b001_00000 | n as u8).map_err(From::from),
-                n @ 24...0xFF             => w.write_u8(0b001_00000 | 24).and(w.write_u8(n as u8)).map_err(From::from),
-                n @ 0x100...0xFFFF        => w.write_u8(0b001_00000 | 25).and(w.write_u16::<BigEndian>(n as u16)).map_err(From::from),
-                n @ 0x100000...0xFFFFFFFF => w.write_u8(0b001_00000 | 26).and(w.write_u32::<BigEndian>(n as u32)).map_err(From::from),
-                n                         => w.write_u8(0b001_00000 | 27).and(w.write_u64::<BigEndian>(n)).map_err(From::from)
+                n @ 0..=23 => w.write_u8(0b001_00000 | n as u8).map_err(From::from),
+                n @ 24..=0xFF => w
+                    .write_u8(0b001_00000 | 24)
+                    .and(w.write_u8(n as u8))
+                    .map_err(From::from),
+                n @ 0x100..=0xFFFF => w
+                    .write_u8(0b001_00000 | 25)
+                    .and(w.write_u16::<BigEndian>(n as u16))
+                    .map_err(From::from),
+                n @ 0x100000..=0xFFFFFFFF => w
+                    .write_u8(0b001_00000 | 26)
+                    .and(w.write_u32::<BigEndian>(n as u32))
+                    .map_err(From::from),
+                n => w
+                    .write_u8(0b001_00000 | 27)
+                    .and(w.write_u64::<BigEndian>(n))
+                    .map_err(From::from),
             }
         }
     }
@@ -248,44 +298,66 @@ impl<W: WriteBytesExt> Encoder<W> {
             Int::Neg(v) => {
                 let ref mut w = self.writer;
                 match v {
-                    n @ 0...23                => w.write_u8(0b001_00000 | n as u8).map_err(From::from),
-                    n @ 24...0xFF             => w.write_u8(0b001_00000 | 24).and(w.write_u8(n as u8)).map_err(From::from),
-                    n @ 0x100...0xFFFF        => w.write_u8(0b001_00000 | 25).and(w.write_u16::<BigEndian>(n as u16)).map_err(From::from),
-                    n @ 0x100000...0xFFFFFFFF => w.write_u8(0b001_00000 | 26).and(w.write_u32::<BigEndian>(n as u32)).map_err(From::from),
-                    n                         => w.write_u8(0b001_00000 | 27).and(w.write_u64::<BigEndian>(n)).map_err(From::from)
+                    n @ 0..=23 => w.write_u8(0b001_00000 | n as u8).map_err(From::from),
+                    n @ 24..=0xFF => w
+                        .write_u8(0b001_00000 | 24)
+                        .and(w.write_u8(n as u8))
+                        .map_err(From::from),
+                    n @ 0x100..=0xFFFF => w
+                        .write_u8(0b001_00000 | 25)
+                        .and(w.write_u16::<BigEndian>(n as u16))
+                        .map_err(From::from),
+                    n @ 0x100000..=0xFFFFFFFF => w
+                        .write_u8(0b001_00000 | 26)
+                        .and(w.write_u32::<BigEndian>(n as u32))
+                        .map_err(From::from),
+                    n => w
+                        .write_u8(0b001_00000 | 27)
+                        .and(w.write_u64::<BigEndian>(n))
+                        .map_err(From::from),
                 }
             }
         }
     }
 
     pub fn f32(&mut self, x: f32) -> EncodeResult {
-        self.writer.write_u8(0b111_00000 | 26)
+        self.writer
+            .write_u8(0b111_00000 | 26)
             .and(self.writer.write_f32::<BigEndian>(x))
             .map_err(From::from)
     }
 
     pub fn f64(&mut self, x: f64) -> EncodeResult {
-        self.writer.write_u8(0b111_00000 | 27)
+        self.writer
+            .write_u8(0b111_00000 | 27)
             .and(self.writer.write_f64::<BigEndian>(x))
             .map_err(From::from)
     }
 
     pub fn bool(&mut self, x: bool) -> EncodeResult {
-        self.writer.write_u8(0b111_00000 | if x {21} else {20}).map_err(From::from)
+        self.writer
+            .write_u8(0b111_00000 | if x { 21 } else { 20 })
+            .map_err(From::from)
     }
 
     pub fn simple(&mut self, x: Simple) -> EncodeResult {
         let ref mut w = self.writer;
         match x {
             Simple::Unassigned(n) => match n {
-                0...19 | 28...30 => w.write_u8(0b111_00000 | n).map_err(From::from),
-                32...255         => w.write_u8(0b111_00000 | 24).and(w.write_u8(n)).map_err(From::from),
-                _                => Err(EncodeError::InvalidSimpleValue(x))
+                0..=19 | 28..=30 => w.write_u8(0b111_00000 | n).map_err(From::from),
+                32..=255 => w
+                    .write_u8(0b111_00000 | 24)
+                    .and(w.write_u8(n))
+                    .map_err(From::from),
+                _ => Err(EncodeError::InvalidSimpleValue(x)),
             },
             Simple::Reserved(n) => match n {
-                0...31 => w.write_u8(0b111_00000 | 24).and(w.write_u8(n)).map_err(From::from),
-                _      => Err(EncodeError::InvalidSimpleValue(x))
-            }
+                0..=31 => w
+                    .write_u8(0b111_00000 | 24)
+                    .and(w.write_u8(n))
+                    .map_err(From::from),
+                _ => Err(EncodeError::InvalidSimpleValue(x)),
+            },
         }
     }
 
@@ -295,7 +367,7 @@ impl<W: WriteBytesExt> Encoder<W> {
     }
 
     /// Indefinite byte string encoding. (RFC 7049 section 2.2.2)
-    pub fn bytes_iter<'r, I: Iterator<Item=&'r [u8]>>(&mut self, iter: I) -> EncodeResult {
+    pub fn bytes_iter<'r, I: Iterator<Item = &'r [u8]>>(&mut self, iter: I) -> EncodeResult {
         self.writer.write_u8(0b010_11111)?;
         for x in iter {
             self.bytes(x)?
@@ -309,7 +381,7 @@ impl<W: WriteBytesExt> Encoder<W> {
     }
 
     /// Indefinite string encoding. (RFC 7049 section 2.2.2)
-    pub fn text_iter<'r, I: Iterator<Item=&'r str>>(&mut self, iter: I) -> EncodeResult {
+    pub fn text_iter<'r, I: Iterator<Item = &'r str>>(&mut self, iter: I) -> EncodeResult {
         self.writer.write_u8(0b011_11111)?;
         for x in iter {
             self.text(x)?
@@ -360,11 +432,23 @@ impl<W: WriteBytesExt> Encoder<W> {
     fn type_len(&mut self, t: Type, x: u64) -> EncodeResult {
         let ref mut w = self.writer;
         match x {
-            0...23                => w.write_u8(t.major() << 5 | x as u8).map_err(From::from),
-            24...0xFF             => w.write_u8(t.major() << 5 | 24).and(w.write_u8(x as u8)).map_err(From::from),
-            0x100...0xFFFF        => w.write_u8(t.major() << 5 | 25).and(w.write_u16::<BigEndian>(x as u16)).map_err(From::from),
-            0x100000...0xFFFFFFFF => w.write_u8(t.major() << 5 | 26).and(w.write_u32::<BigEndian>(x as u32)).map_err(From::from),
-            _                     => w.write_u8(t.major() << 5 | 27).and(w.write_u64::<BigEndian>(x)).map_err(From::from)
+            0..=23 => w.write_u8(t.major() << 5 | x as u8).map_err(From::from),
+            24..=0xFF => w
+                .write_u8(t.major() << 5 | 24)
+                .and(w.write_u8(x as u8))
+                .map_err(From::from),
+            0x100..=0xFFFF => w
+                .write_u8(t.major() << 5 | 25)
+                .and(w.write_u16::<BigEndian>(x as u16))
+                .map_err(From::from),
+            0x100000..=0xFFFFFFFF => w
+                .write_u8(t.major() << 5 | 26)
+                .and(w.write_u32::<BigEndian>(x as u32))
+                .map_err(From::from),
+            _ => w
+                .write_u8(t.major() << 5 | 27)
+                .and(w.write_u64::<BigEndian>(x))
+                .map_err(From::from),
         }
     }
 }
@@ -373,12 +457,14 @@ impl<W: WriteBytesExt> Encoder<W> {
 
 /// A generic encoder encodes a `Value`.
 pub struct GenericEncoder<W> {
-    encoder: Encoder<W>
+    encoder: Encoder<W>,
 }
 
 impl<W: WriteBytesExt> GenericEncoder<W> {
     pub fn new(w: W) -> GenericEncoder<W> {
-        GenericEncoder { encoder: Encoder::new(w) }
+        GenericEncoder {
+            encoder: Encoder::new(w),
+        }
     }
 
     pub fn from_encoder(e: Encoder<W>) -> GenericEncoder<W> {
@@ -402,10 +488,14 @@ impl<W: WriteBytesExt> GenericEncoder<W> {
                 }
                 Ok(())
             }
-            Value::Bytes(Bytes::Bytes(ref bb))  => self.encoder.bytes(&bb[..]),
-            Value::Bytes(Bytes::Chunks(ref bb)) => self.encoder.bytes_iter(bb.iter().map(|v| &v[..])),
-            Value::Text(Text::Text(ref txt))    => self.encoder.text(txt),
-            Value::Text(Text::Chunks(ref txt))  => self.encoder.text_iter(txt.iter().map(|v| &v[..])),
+            Value::Bytes(Bytes::Bytes(ref bb)) => self.encoder.bytes(&bb[..]),
+            Value::Bytes(Bytes::Chunks(ref bb)) => {
+                self.encoder.bytes_iter(bb.iter().map(|v| &v[..]))
+            }
+            Value::Text(Text::Text(ref txt)) => self.encoder.text(txt),
+            Value::Text(Text::Chunks(ref txt)) => {
+                self.encoder.text_iter(txt.iter().map(|v| &v[..]))
+            }
             Value::Map(ref m) => {
                 self.encoder.object(m.len())?;
                 for (k, v) in m {
@@ -418,32 +508,32 @@ impl<W: WriteBytesExt> GenericEncoder<W> {
                 self.value(&*val)
             }
             Value::Undefined => self.encoder.undefined(),
-            Value::Null      => self.encoder.null(),
+            Value::Null => self.encoder.null(),
             Value::Simple(s) => self.encoder.simple(s),
-            Value::Bool(b)   => self.encoder.bool(b),
-            Value::U8(n)     => self.encoder.u8(n),
-            Value::U16(n)    => self.encoder.u16(n),
-            Value::U32(n)    => self.encoder.u32(n),
-            Value::U64(n)    => self.encoder.u64(n),
-            Value::F32(n)    => self.encoder.f32(n),
-            Value::F64(n)    => self.encoder.f64(n),
-            Value::I8(n)     => self.encoder.i8(n),
-            Value::I16(n)    => self.encoder.i16(n),
-            Value::I32(n)    => self.encoder.i32(n),
-            Value::I64(n)    => self.encoder.i64(n),
-            Value::Int(n)    => self.encoder.int(n),
-            Value::Break     => Err(EncodeError::InvalidValue(Value::Break))
+            Value::Bool(b) => self.encoder.bool(b),
+            Value::U8(n) => self.encoder.u8(n),
+            Value::U16(n) => self.encoder.u16(n),
+            Value::U32(n) => self.encoder.u32(n),
+            Value::U64(n) => self.encoder.u64(n),
+            Value::F32(n) => self.encoder.f32(n),
+            Value::F64(n) => self.encoder.f64(n),
+            Value::I8(n) => self.encoder.i8(n),
+            Value::I16(n) => self.encoder.i16(n),
+            Value::I32(n) => self.encoder.i32(n),
+            Value::I64(n) => self.encoder.i64(n),
+            Value::Int(n) => self.encoder.int(n),
+            Value::Break => Err(EncodeError::InvalidValue(Value::Break)),
         }
     }
 
     fn key(&mut self, x: &Key) -> EncodeResult {
         match *x {
             Key::Bool(b) => self.encoder.bool(b),
-            Key::Int(n)  => self.encoder.int(n),
-            Key::Bytes(Bytes::Bytes(ref bb))  => self.encoder.bytes(&bb[..]),
+            Key::Int(n) => self.encoder.int(n),
+            Key::Bytes(Bytes::Bytes(ref bb)) => self.encoder.bytes(&bb[..]),
             Key::Bytes(Bytes::Chunks(ref bb)) => self.encoder.bytes_iter(bb.iter().map(|v| &v[..])),
-            Key::Text(Text::Text(ref txt))    => self.encoder.text(txt),
-            Key::Text(Text::Chunks(ref txt))  => self.encoder.text_iter(txt.iter().map(|v| &v[..]))
+            Key::Text(Text::Text(ref txt)) => self.encoder.text(txt),
+            Key::Text(Text::Chunks(ref txt)) => self.encoder.text_iter(txt.iter().map(|v| &v[..])),
         }
     }
 }
@@ -452,12 +542,12 @@ impl<W: WriteBytesExt> GenericEncoder<W> {
 
 #[cfg(test)]
 mod tests {
-    use rustc_serialize::hex::FromHex;
-    use std::{f32, f64};
-    use std::io::Cursor;
     use super::*;
-    use types::Tag;
-    use value::Simple;
+    use crate::types::Tag;
+    use crate::value::Simple;
+    use rustc_serialize::hex::FromHex;
+    use std::io::Cursor;
+    use std::{f32, f64};
 
     #[test]
     fn unsigned() {
@@ -515,15 +605,16 @@ mod tests {
 
     #[test]
     fn bytes() {
-        encoded("4401020304", |mut e| e.bytes(&vec![1,2,3,4][..]));
+        encoded("4401020304", |mut e| e.bytes(&vec![1, 2, 3, 4][..]));
     }
 
     #[test]
     fn text() {
         encoded("62c3bc", |mut e| e.text("\u{00fc}"));
-        encoded("781f64667364667364660d0a7364660d0a68656c6c6f0d0a736466736673646673", |mut e| {
-            e.text("dfsdfsdf\r\nsdf\r\nhello\r\nsdfsfsdfs")
-        });
+        encoded(
+            "781f64667364667364660d0a7364660d0a68656c6c6f0d0a736466736673646673",
+            |mut e| e.text("dfsdfsdf\r\nsdf\r\nhello\r\nsdfsfsdfs"),
+        );
     }
 
     #[test]
@@ -563,11 +654,11 @@ mod tests {
         });
         encoded("8301820203820405", |mut e| {
             e.array(3)
-             .and(e.u8(1))
-             .and(e.array(2))
+                .and(e.u8(1))
+                .and(e.array(2))
                 .and(e.u8(2))
                 .and(e.u8(3))
-             .and(e.array(2))
+                .and(e.array(2))
                 .and(e.u8(4))
                 .and(e.u8(5))
         })
@@ -577,46 +668,46 @@ mod tests {
     fn indefinite_array() {
         encoded("9f018202039f0405ffff", |mut e| {
             e.array_begin()
-             .and(e.u8(1))
-             .and(e.array(2))
+                .and(e.u8(1))
+                .and(e.array(2))
                 .and(e.u8(2))
                 .and(e.u8(3))
-             .and(e.array_begin())
+                .and(e.array_begin())
                 .and(e.u8(4))
                 .and(e.u8(5))
                 .and(e.array_end())
-            .and(e.array_end())
+                .and(e.array_end())
         });
         encoded("9f01820203820405ff", |mut e| {
             e.array_begin()
-             .and(e.u8(1))
-             .and(e.array(2))
+                .and(e.u8(1))
+                .and(e.array(2))
                 .and(e.u8(2))
                 .and(e.u8(3))
-             .and(e.array(2))
+                .and(e.array(2))
                 .and(e.u8(4))
                 .and(e.u8(5))
-            .and(e.array_end())
+                .and(e.array_end())
         });
         encoded("83018202039f0405ff", |mut e| {
             e.array(3)
-             .and(e.u8(1))
-             .and(e.array(2))
+                .and(e.u8(1))
+                .and(e.array(2))
                 .and(e.u8(2))
                 .and(e.u8(3))
-             .and(e.array_begin())
+                .and(e.array_begin())
                 .and(e.u8(4))
                 .and(e.u8(5))
                 .and(e.array_end())
         });
         encoded("83019f0203ff820405", |mut e| {
             e.array(3)
-             .and(e.u8(1))
-             .and(e.array_begin())
+                .and(e.u8(1))
+                .and(e.array_begin())
                 .and(e.u8(2))
                 .and(e.u8(3))
                 .and(e.array_end())
-             .and(e.array(2))
+                .and(e.array(2))
                 .and(e.u8(4))
                 .and(e.u8(5))
         })
@@ -635,19 +726,23 @@ mod tests {
     fn indefinite_object() {
         encoded("bf6346756ef563416d7421ff", |mut e| {
             e.object_begin()
-             .and(e.text("Fun"))
-             .and(e.bool(true))
-             .and(e.text("Amt"))
-             .and(e.i8(-2))
-             .and(e.object_end())
+                .and(e.text("Fun"))
+                .and(e.bool(true))
+                .and(e.text("Amt"))
+                .and(e.i8(-2))
+                .and(e.object_end())
         })
     }
 
     fn encoded<F>(expected: &str, mut f: F)
-    where F: FnMut(Encoder<Cursor<&mut [u8]>>) -> EncodeResult
+    where
+        F: FnMut(Encoder<Cursor<&mut [u8]>>) -> EncodeResult,
     {
         let mut buffer = vec![0u8; 128];
         assert!(f(Encoder::new(Cursor::new(&mut buffer[..]))).is_ok());
-        assert_eq!(&expected.from_hex().unwrap()[..], &buffer[0 .. expected.len() / 2])
+        assert_eq!(
+            &expected.from_hex().unwrap()[..],
+            &buffer[0..expected.len() / 2]
+        )
     }
 }
