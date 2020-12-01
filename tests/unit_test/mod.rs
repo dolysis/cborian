@@ -3,14 +3,15 @@
 // the MPL was not distributed with this file, You
 // can obtain one at http://mozilla.org/MPL/2.0/.
 
+use crate::util_test;
 use cborian::value::{Int, Key, Text, Value};
 use cborian::{Config, GenericDecoder};
 use json::decoder::ReadIter;
+use json::{object, to_field};
 use json::{DecodeResult, Decoder, FromJson, Json};
 use rustc_serialize::base64::FromBase64;
 use std::fs::File;
 use std::{f32, f64, i16, i32, i64, i8, u64};
-use util;
 
 #[derive(Debug, Clone)]
 struct TestVector {
@@ -38,37 +39,37 @@ impl FromJson for TestVector {
 
 #[test]
 fn int_min_max() {
-    util::identity(|mut e| e.i8(i8::MAX), |mut d| d.i8().unwrap() == i8::MAX);
-    util::identity(|mut e| e.i8(i8::MIN), |mut d| d.i8().unwrap() == i8::MIN);
-    util::identity(
+    util_test::identity(|mut e| e.i8(i8::MAX), |mut d| d.i8().unwrap() == i8::MAX);
+    util_test::identity(|mut e| e.i8(i8::MIN), |mut d| d.i8().unwrap() == i8::MIN);
+    util_test::identity(
         |mut e| e.i16(i16::MAX),
         |mut d| d.i16().unwrap() == i16::MAX,
     );
-    util::identity(
+    util_test::identity(
         |mut e| e.i16(i16::MIN),
         |mut d| d.i16().unwrap() == i16::MIN,
     );
-    util::identity(
+    util_test::identity(
         |mut e| e.i32(i32::MAX),
         |mut d| d.i32().unwrap() == i32::MAX,
     );
-    util::identity(
+    util_test::identity(
         |mut e| e.i32(i32::MIN),
         |mut d| d.i32().unwrap() == i32::MIN,
     );
-    util::identity(
+    util_test::identity(
         |mut e| e.i64(i64::MAX),
         |mut d| d.i64().unwrap() == i64::MAX,
     );
-    util::identity(
+    util_test::identity(
         |mut e| e.i64(i64::MIN),
         |mut d| d.i64().unwrap() == i64::MIN,
     );
-    util::identity(
+    util_test::identity(
         |mut e| e.int(Int::Neg(u64::MAX)),
         |mut d| d.int().unwrap() == Int::Neg(u64::MAX),
     );
-    util::identity(
+    util_test::identity(
         |mut e| e.int(Int::Pos(u64::MAX)),
         |mut d| d.int().unwrap().u64() == Some(u64::MAX),
     );
@@ -112,7 +113,7 @@ fn eq(a: &Json, b: &Value) -> bool {
             }
             x == &s
         }
-        (&Json::Number(x), y) => util::as_f64(y)
+        (&Json::Number(x), y) => util_test::as_f64(y)
             .map(|i| (x - i).abs() < f64::EPSILON)
             .unwrap_or(false),
         (&Json::Array(ref x), &Value::Array(ref y)) => {

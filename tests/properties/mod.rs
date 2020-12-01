@@ -3,10 +3,11 @@
 // the MPL was not distributed with this file, You
 // can obtain one at http://mozilla.org/MPL/2.0/.
 
-use util::identity;
-use std::{i8, i16, i32, i64, f32, f64};
+use crate::util_test::identity;
+use quickcheck_macros::quickcheck;
+use std::{f32, f64, i16, i32, i64, i8};
 
-#[cfg(feature="random")]
+#[cfg(feature = "random")]
 mod value;
 
 #[quickcheck]
@@ -87,12 +88,18 @@ fn identity_u64_i64(x: u64) -> bool {
 
 #[quickcheck]
 fn identity_f32(x: f32) -> bool {
-    identity(|mut e| e.f32(x), |mut d| f32::abs(d.f32().unwrap() - x) < f32::EPSILON)
+    identity(
+        |mut e| e.f32(x),
+        |mut d| f32::abs(d.f32().unwrap() - x) < f32::EPSILON,
+    )
 }
 
 #[quickcheck]
 fn identity_f64(x: f64) -> bool {
-    identity(|mut e| e.f64(x), |mut d| f64::abs(d.f64().unwrap() - x) < f64::EPSILON)
+    identity(
+        |mut e| e.f64(x),
+        |mut d| f64::abs(d.f64().unwrap() - x) < f64::EPSILON,
+    )
 }
 
 #[quickcheck]
@@ -102,8 +109,15 @@ fn identity_bytes(x: Vec<u8>) -> bool {
 
 #[quickcheck]
 fn identity_bytes_stream(v: Vec<Vec<u8>>) -> bool {
-    identity(|mut e| e.bytes_iter(v.iter().map(|x| &x[..])),
-             |mut d| d.bytes_iter().unwrap().zip(v.iter()).all(|(x, y)| &x.unwrap() == y))
+    identity(
+        |mut e| e.bytes_iter(v.iter().map(|x| &x[..])),
+        |mut d| {
+            d.bytes_iter()
+                .unwrap()
+                .zip(v.iter())
+                .all(|(x, y)| &x.unwrap() == y)
+        },
+    )
 }
 
 #[quickcheck]
@@ -113,6 +127,13 @@ fn identity_text(x: String) -> bool {
 
 #[quickcheck]
 fn identity_text_stream(v: Vec<String>) -> bool {
-    identity(|mut e| e.text_iter(v.iter().map(|x| &x[..])),
-             |mut d| d.text_iter().unwrap().zip(v.iter()).all(|(x, y)| &x.unwrap() == y))
+    identity(
+        |mut e| e.text_iter(v.iter().map(|x| &x[..])),
+        |mut d| {
+            d.text_iter()
+                .unwrap()
+                .zip(v.iter())
+                .all(|(x, y)| &x.unwrap() == y)
+        },
+    )
 }
