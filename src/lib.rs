@@ -7,14 +7,11 @@
 
 pub mod decoder;
 pub mod encoder;
+pub mod random;
 pub mod skip;
 pub mod slice;
 pub mod types;
 pub mod value;
-
-#[cfg(feature = "random")]
-pub mod random;
-
 pub use decoder::{maybe, opt, or_break};
 pub use decoder::{Config, DecodeError, DecodeResult, Decoder, GenericDecoder};
 pub use encoder::{EncodeError, EncodeResult, Encoder, GenericEncoder};

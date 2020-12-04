@@ -7,10 +7,10 @@
 //!
 //! This module is only available with `--features="random"`.
 
+use crate::types::Tag;
+use crate::value::{Bytes, Int, Key, Simple, Text, Value};
 use quickcheck::{Arbitrary, Gen};
 use std::collections::{BTreeMap, LinkedList};
-use types::Tag;
-use value::{Bytes, Int, Key, Simple, Text, Value};
 
 /// Generate a random `cborian::Value`.
 /// Mostly useful for quickcheck related tests.

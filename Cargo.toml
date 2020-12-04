@@ -13,21 +13,20 @@ edition       = "2018"
 [lib]
 name = "cborian"
 
-[features]
-random = ["quickcheck"]
-
 [dependencies]
+quickcheck        = ">= 0.2.21"
+quickcheck_macros = ">= 0.2.21"
 byteorder = ">= 0.5.0"
 libc      = ">  0.1.0"
 
-[dependencies.quickcheck]
-version  = ">= 0.2.21"
-optional = true
-
 [dev-dependencies]
+criterion = "0.3.3"
 json-codec        = ">= 0.3"
-quickcheck        = ">= 0.2.21"
-quickcheck_macros = ">= 0.2.21"
-rand              = ">= 0.3"
+rand              = "0.7.3"
+rand_chacha = "0.2.2"
 rustc-serialize   = ">= 0.3"
+
+[[bench]]
+name = "cborian_benchmark"
+harness = false
 
