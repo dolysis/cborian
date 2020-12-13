@@ -6,8 +6,8 @@ license       = "MPL-2.0"
 description   = "CBOR Codec implementation"
 repository    = "https://github.com/dolysis/cborian"
 documentation = "https://docs.rs/cborian"
-keywords      = ["cbor", "encoding", "binary"]
-categories    = ["encoding"]
+keywords      = ["cbor", "encoding", "binary", "decoding"]
+categories    = ["encoding", "decoding"]
 edition       = "2018"
 
 [lib]
