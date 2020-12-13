@@ -7,7 +7,7 @@ description   = "CBOR Codec implementation"
 repository    = "https://github.com/dolysis/cborian"
 documentation = "https://docs.rs/cborian"
 keywords      = ["cbor", "encoding", "binary", "decoding"]
-categories    = ["encoding", "decoding"]
+categories    = ["encoding"]
 edition       = "2018"
 
 [lib]
