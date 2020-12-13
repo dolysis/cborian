@@ -1,11 +1,11 @@
 [package]
 name          = "cborian"
-version       = "0.9.0"
+version       = "0.9.1"
 authors       = ["Toralf Wittner <tw@dtex.org>", "psox <psox(a)st8l.com>"]
 license       = "MPL-2.0"
 description   = "CBOR Codec implementation"
 repository    = "https://github.com/dolysis/cborian"
-documentation = "https://twittner.gitlab.io/cbor-codec/cbor/"
+documentation = "https://docs.rs/cborian"
 keywords      = ["cbor", "encoding", "binary"]
 categories    = ["encoding"]
 edition       = "2018"
