@@ -462,9 +462,9 @@ impl<W: WriteBytesExt> GenericEncoder<W> {
     }
 
     // dead code
-    // pub fn borrow_mut(&mut self) -> &mut Encoder<W> {
-    //     &mut self.encoder
-    // }
+    pub fn borrow_mut(&mut self) -> &mut Encoder<W> {
+        &mut self.encoder
+    }
 
     pub fn value(&mut self, x: &Value) -> EncodeResult {
         match *x {

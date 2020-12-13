@@ -5,10 +5,11 @@
 
 use cborian::{random::gen_value, Config, GenericDecoder, GenericEncoder};
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use rand::prelude::*;
-use std::{borrow::BorrowMut, io::Cursor};
+use quickcheck::StdGen;
+use std::io::Cursor;
 
 fn make_value(min: usize) -> Vec<u8> {
+    let mut generator = StdGen::new(rand::thread_rng(), 20);
     let mut encoder = GenericEncoder::new(Cursor::new(Vec::new()));
     encoder.borrow_mut().array(min).unwrap();
     for _ in 0..min {

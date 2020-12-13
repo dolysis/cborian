@@ -5,54 +5,54 @@
 
 //! Generate random `cborian::Value`s.
 //!
-//! This module is only available with `--features="random"`.
-
-use crate::types::Tag;
-use crate::value::{Bytes, Int, Key, Simple, Text, Value};
+use super::types::Tag;
+use super::value::{Bytes, Int, Key, Simple, Text, Value};
 use quickcheck::{Arbitrary, Gen};
+use rand::prelude::*;
 use std::collections::{BTreeMap, LinkedList};
 
 /// Generate a random `cborian::Value`.
 /// Mostly useful for quickcheck related tests.
 /// The parameter `level` denotes the maximum nesting of this value.
-pub fn gen_value<G: Gen>(level: u16, g: &mut G) -> Value {
-    match g.gen_range(0, 20) {
+pub fn gen_value<GenType: Gen>(level: u16, make_value: &mut GenType) -> Value {
+    let mut make_value = make_value;
+    match rand::Rng::gen_range(&mut make_value, 0, 20) {
         0 => Value::Null,
         1 => Value::Undefined,
-        2 => Value::U8(g.gen()),
-        3 => Value::U16(g.gen()),
-        4 => Value::U32(g.gen()),
-        5 => Value::U64(g.gen()),
-        6 => Value::I8(g.gen()),
-        7 => Value::I16(g.gen()),
-        8 => Value::I32(g.gen()),
-        9 => Value::I64(g.gen()),
-        10 => Value::F32(g.gen()),
-        11 => Value::F64(g.gen()),
-        12 => Value::Text(gen_text(g)),
-        13 => Value::Bytes(gen_bytes(g)),
+        2 => Value::U8(make_value.gen()),
+        3 => Value::U16(make_value.gen()),
+        4 => Value::U32(make_value.gen()),
+        5 => Value::U64(make_value.gen()),
+        6 => Value::I8(make_value.gen()),
+        7 => Value::I16(make_value.gen()),
+        8 => Value::I32(make_value.gen()),
+        9 => Value::I64(make_value.gen()),
+        10 => Value::F32(make_value.gen()),
+        11 => Value::F64(make_value.gen()),
+        12 => Value::Text(gen_text(make_value)),
+        13 => Value::Bytes(gen_bytes(make_value)),
         14 => Value::Array(if level > 0 {
-            gen_array(level - 1, g)
+            gen_array(level - 1, make_value)
         } else {
             Vec::with_capacity(0)
         }),
-        15 => Value::Bool(g.gen()),
-        16 => Value::Simple(gen_simple(g)),
+        15 => Value::Bool(make_value.gen()),
+        16 => Value::Simple(gen_simple(make_value)),
         17 => Value::Map(if level > 0 {
-            gen_map(level - 1, g)
+            gen_map(level - 1, make_value)
         } else {
             BTreeMap::new()
         }),
-        18 => Value::Int(gen_int(g)),
-        _ => gen_tagged(g),
+        18 => Value::Int(gen_int(make_value)),
+        _ => gen_tagged(make_value),
     }
 }
 
-fn gen_array<G: Gen>(level: u16, g: &mut G) -> Vec<Value> {
-    let len = g.gen_range(0, 64);
+fn gen_array<GenType: Gen>(level: u16, make_value: &mut GenType) -> Vec<Value> {
+    let len = make_value.gen_range(0, 64);
     let mut vec = Vec::with_capacity(len);
     for _ in 0..len {
-        vec.push(gen_value(level, g))
+        vec.push(gen_value(level, make_value))
     }
     vec
 }
@@ -130,12 +130,12 @@ fn gen_chunks<A: Arbitrary, G: Gen>(g: &mut G) -> LinkedList<A> {
 fn gen_simple<G: Gen>(g: &mut G) -> Simple {
     match g.gen() {
         true => match g.gen() {
-            n @ 0u8...19 | n @ 28...30 => Simple::Unassigned(n),
-            n @ 32...255 => Simple::Unassigned(n),
+            n @ 0u8..=19 | n @ 28..=30 => Simple::Unassigned(n),
+            n @ 32..=255 => Simple::Unassigned(n),
             _ => Simple::Unassigned(0),
         },
         false => match g.gen() {
-            n @ 0u8...31 => Simple::Reserved(n),
+            n @ 0u8..=31 => Simple::Reserved(n),
             _ => Simple::Reserved(0),
         },
     }

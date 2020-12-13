@@ -18,6 +18,7 @@ quickcheck        = ">= 0.2.21"
 quickcheck_macros = ">= 0.2.21"
 byteorder = ">= 0.5.0"
 libc      = ">  0.1.0"
+rand = "0.7.3"
 
 [dev-dependencies]
 criterion = "0.3.3"
